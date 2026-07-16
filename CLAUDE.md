@@ -8,16 +8,23 @@ Reference repos (read-only, added via `/add-dir`, never modify):
 - `../vitallens-ios` — source of truth for public API shape and behavior.
 - `../vitallens-core` — Rust core. Android build tooling for this is **out of
   scope** here; treat its generated Kotlin bindings (`VitalLensCore.kt`) and
-  compiled `.so`/`.aar` as a given dependency, not something to build.
+  compiled `.so`/`.aar` as a given dependency, not something to build. Now
+  published to Maven Central as `com.rouast:vitallens-core` (real artifact,
+  packaging `aar`) — see the Ground rules bullet below for coordinates.
 
 ## Ground rules
 
 - Match the Swift SDK's public API surface and calling patterns as closely as
   Kotlin idiom allows. When in doubt, check the equivalent Swift file in
   `../vitallens-ios` before inventing a new shape.
-- Don't reach for the Rust core's Android build — assume `VitalLensCore.kt`
-  and its native libs already exist as a dependency (`com.rouast:vitallens-core-android`
-  placeholder coordinate until real artifact exists).
+- Don't reach for the Rust core's Android build — `VitalLensCore.kt` and its
+  native libs are consumed as a published dependency,
+  `com.rouast:vitallens-core` (Maven Central, packaging `aar`, current
+  version tracked as `vitallensCore` in `libs.versions.toml`). Its AAR
+  metadata pins `minCompileSdk=36`/`minAGP=1.0.0`, consistent with our own
+  floor. It brings `net.java.dev.jna:jna` (aar) and `kotlin-stdlib` as
+  transitive dependencies and ships `jniLibs` for all four standard ABIs;
+  generated classes live under `com.rouast.vitallens.core`.
 - Prefer small, reviewable PRs/commits over one big dump. Build one file or
   one small group of related files at a time, run `./gradlew build`, then move on.
 - No native code (no libyuv/JNI for image processing) in the first pass —

@@ -11,7 +11,7 @@ lifecycleProcess = "2.9.4"
 coreKtx = "1.18.0"
 activityCompose = "1.13.0"
 junit = "4.13.2"
-vitallensCore = "0.2.5"
+vitallensCore = "0.3.2"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -43,8 +43,9 @@ compose-material3 = { module = "androidx.compose.material3:material3" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 # Generated UniFFI Kotlin bindings + native libs for the Rust core (vitallens-core).
-# Placeholder coordinate — not yet published. See CLAUDE.md "Ground rules".
-vitallens-core-android = { module = "com.rouast:vitallens-core-android", version.ref = "vitallensCore" }
+# Published as an .aar; packaging="aar" in its POM, so this must resolve via
+# an Android-aware configuration (i.e. only from an com.android.library module).
+vitallens-core = { module = "com.rouast:vitallens-core", version.ref = "vitallensCore" }
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }

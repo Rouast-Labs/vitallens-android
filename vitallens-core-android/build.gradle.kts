@@ -40,8 +40,7 @@ dependencies {
     implementation(libs.mlkit.face.detection)
 
     // Generated UniFFI Kotlin bindings + native libs for the Rust core.
-    // Uncomment once com.rouast:vitallens-core-android is published (see CLAUDE.md).
-    // implementation(libs.vitallens.core.android)
+    implementation(libs.vitallens.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
