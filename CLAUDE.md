@@ -66,6 +66,31 @@ Reference repos (read-only, added via `/add-dir`, never modify):
   similarly propagate — `minAndroidGradlePluginVersion` in our own published
   AAR was verified to stay at the default `1.0.0` regardless.
 
+## Development workflow: TDD
+
+Every file with real logic (parsing, computation, conditionals, encode/decode)
+follows red-green-refactor, in this order, as separate steps — not combined
+into one prompt turn:
+
+1. RED — Port or write the test file first, based on the corresponding Swift
+   test in ../vitallens-ios (VitalLensInferenceTests / VitalLensTests /
+   VitalLensUITests) if one exists for that source file. If no Swift test
+   exists for it, write Kotlin tests from the doc comments and behavior in
+   the Swift source itself. Do not write the Kotlin implementation yet.
+2. Run the tests and confirm they fail (compile failure because the
+   production class doesn't exist yet counts as red).
+3. Commit the failing test file alone as a checkpoint.
+4. GREEN — Port the implementation to make the tests pass. Do not modify the
+   tests to make them pass — if a test seems wrong, stop and flag it rather
+   than loosening it.
+5. REFACTOR — clean up once green, tests must stay green.
+
+Exception: pure data-shape files with no real logic (simple data classes,
+enums with no computed behavior) don't need the full ceremony — write a thin
+verification test immediately alongside the port rather than a separate
+red/green round trip, since there's no meaningful "red" state for a file
+that's just declaring shape.
+
 ## Module structure
 
 ```
