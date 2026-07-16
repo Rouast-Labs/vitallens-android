@@ -105,7 +105,7 @@ vitallens-android/
 │   ├── Rect.kt                   # framework-agnostic normalized ROI type
 │   ├── ROICalculator.kt
 │   └── SessionAdapter.kt        # bridges to VitalLensCore.kt (generated)
-├── vitallens-core-android/  # Android library: camera, face detection, image processing
+├── vitallens/  # Android library: camera, face detection, image processing
 │   ├── camera/                # CameraSource (CameraX), PassiveSource, FileSource
 │   ├── vision/                  # FaceDetector (ML Kit)
 │   ├── image/                    # ImageProcessor (pure Kotlin)
@@ -123,7 +123,7 @@ vitallens-android/
     └── WaveformChart.kt
 ```
 
-Publishing split mirrors SPM: `vitallens-core-android` + `vitallens-ui`
+Publishing split mirrors SPM: `vitallens` + `vitallens-ui`
 together form the "full SDK" product; `vitallens-inference` is usable
 standalone (headless / bring-your-own-frames via CoreML-analog custom
 strategies).
@@ -155,7 +155,7 @@ scope for anything that needs cancellation.
 |---|---|---|
 | `Errors.swift` | `ErrorTypes.kt` | sealed class `VitalLensException` (or exception hierarchy) instead of `enum: Error` |
 | `NetworkModels.swift` | `network/NetworkModels.kt` | `data class` + `@Serializable`, snake_case via `@SerialName` |
-| *(no direct source — `CGRect` usage extracted from `FrameBuffer.swift`/`BufferManager.swift`/`ROICalculator.swift`/`SessionAdapter.swift`/`VitalLensResult.swift`)* | `Rect.kt` | `data class Rect(val x: Float, val y: Float, val width: Float, val height: Float)` with `maxX`/`maxY` computed properties, mirroring `CGRect`'s role as a universal Foundation type both Swift targets get for free. Lives here (not `vitallens-core-android`) because it's consumed pervasively inside `VitalLensInference` itself; `vitallens-core-android`'s later `Protocols.kt` port reuses this type instead of redefining it — see "Open decisions" note on the `api()` dependency implication. |
+| *(no direct source — `CGRect` usage extracted from `FrameBuffer.swift`/`BufferManager.swift`/`ROICalculator.swift`/`SessionAdapter.swift`/`VitalLensResult.swift`)* | `Rect.kt` | `data class Rect(val x: Float, val y: Float, val width: Float, val height: Float)` with `maxX`/`maxY` computed properties, mirroring `CGRect`'s role as a universal Foundation type both Swift targets get for free. Lives here (not `vitallens`) because it's consumed pervasively inside `VitalLensInference` itself; `vitallens`'s later `Protocols.kt` port reuses this type instead of redefining it — see "Open decisions" note on the `api()` dependency implication. |
 | `APIInference.swift` | `network/ApiInference.kt` | OkHttp `Call` wrapped with `suspendCancellableCoroutine`, or OkHttp's Kotlin coroutine extensions; gzip via `GZIPOutputStream` |
 | `BufferManager.swift` | `buffer/BufferManager.kt` | actor → Mutex-guarded class |
 | `FrameBuffer.swift` | `buffer/FrameBuffer.kt` | direct port, no concurrency primitives needed (owned exclusively by BufferManager) |
@@ -165,7 +165,7 @@ scope for anything that needs cancellation.
 | `SessionAdapter.swift` | `SessionAdapter.kt` | extension-function equivalents as top-level Kotlin extension functions |
 | `VitalLensResult.swift` | `model/VitalLensResult.kt` + `model/Vital.kt` + `model/Waveform.kt` + `model/FaceData.kt` + `model/StateData.kt` | split into separate files per Kotlin convention; custom `@Serializable` decode logic for the dynamic-key JSON parsing (waveforms/vitals dictionaries) |
 
-### vitallens-core-android (from Sources/VitalLens/)
+### vitallens (from Sources/VitalLens/)
 
 | Swift source | Kotlin target | Notes |
 |---|---|---|
@@ -206,7 +206,7 @@ place to build trust in the Claude Code workflow before tackling camera/UI.
 Includes unit tests ported from `VitalLensInferenceTests` where behavior is
 testable without hardware.
 
-**Phase 2 — `vitallens-core-android` minus UI.** Camera, face detection,
+**Phase 2 — `vitallens` minus UI.** Camera, face detection,
 image processing, stream/file processing, the `VitalLens` client class.
 Decision point to flag explicitly when you reach `FileSource`: start with
 `MediaMetadataRetriever.getFrameAtTime` (simple, adequate for the file-import
@@ -226,7 +226,7 @@ module (`:app`) mirroring `Demo/VitalLensDemo`.
   profiling shows it's a bottleneck.
 - Networking: OkHttp chosen over Ktor for now (no KMP ambitions currently).
 - `FileSource` decode strategy: see Phase 2 note above.
-- `vitallens-core-android`'s `build.gradle.kts` currently declares
+- `vitallens`'s `build.gradle.kts` currently declares
   `implementation(projects.vitallensInference)`. If Phase 2's `Protocols.kt`
   (`FaceDetecting.kt` etc.) exposes `Rect` (from `vitallens-inference`) in
   its own public API surface, that needs to become `api(projects.vitallensInference)`

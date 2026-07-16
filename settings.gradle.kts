@@ -19,5 +19,5 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 rootProject.name = "vitallens-android"
 
 include(":vitallens-inference")
-include(":vitallens-core-android")
+include(":vitallens")
 include(":vitallens-ui")

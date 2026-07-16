@@ -34,7 +34,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(projects.vitallensCoreAndroid)
+    implementation(projects.vitallens)
     implementation(projects.vitallensInference)
 
     implementation(platform(libs.compose.bom))
