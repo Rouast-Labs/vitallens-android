@@ -102,6 +102,7 @@ vitallens-android/
 │   ├── ErrorTypes.kt
 │   ├── InferenceStrategy.kt
 │   ├── LocalInferenceBase.kt
+│   ├── Rect.kt                   # framework-agnostic normalized ROI type
 │   ├── ROICalculator.kt
 │   └── SessionAdapter.kt        # bridges to VitalLensCore.kt (generated)
 ├── vitallens-core-android/  # Android library: camera, face detection, image processing
@@ -154,6 +155,7 @@ scope for anything that needs cancellation.
 |---|---|---|
 | `Errors.swift` | `ErrorTypes.kt` | sealed class `VitalLensException` (or exception hierarchy) instead of `enum: Error` |
 | `NetworkModels.swift` | `network/NetworkModels.kt` | `data class` + `@Serializable`, snake_case via `@SerialName` |
+| *(no direct source — `CGRect` usage extracted from `FrameBuffer.swift`/`BufferManager.swift`/`ROICalculator.swift`/`SessionAdapter.swift`/`VitalLensResult.swift`)* | `Rect.kt` | `data class Rect(val x: Float, val y: Float, val width: Float, val height: Float)` with `maxX`/`maxY` computed properties, mirroring `CGRect`'s role as a universal Foundation type both Swift targets get for free. Lives here (not `vitallens-core-android`) because it's consumed pervasively inside `VitalLensInference` itself; `vitallens-core-android`'s later `Protocols.kt` port reuses this type instead of redefining it — see "Open decisions" note on the `api()` dependency implication. |
 | `APIInference.swift` | `network/ApiInference.kt` | OkHttp `Call` wrapped with `suspendCancellableCoroutine`, or OkHttp's Kotlin coroutine extensions; gzip via `GZIPOutputStream` |
 | `BufferManager.swift` | `buffer/BufferManager.kt` | actor → Mutex-guarded class |
 | `FrameBuffer.swift` | `buffer/FrameBuffer.kt` | direct port, no concurrency primitives needed (owned exclusively by BufferManager) |
@@ -167,7 +169,7 @@ scope for anything that needs cancellation.
 
 | Swift source | Kotlin target | Notes |
 |---|---|---|
-| `Protocols.swift` | `InputFrame.kt`, `CameraStreaming.kt`, `FaceDetecting.kt`, `Rect.kt` | interfaces + data classes, split per Kotlin convention |
+| `Protocols.swift` | `InputFrame.kt`, `CameraStreaming.kt`, `FaceDetecting.kt` | interfaces + data classes, split per Kotlin convention. `Rect` itself is *not* redefined here — reuse `com.rouast.vitallens.inference.Rect` from `vitallens-inference` (ported in Phase 1; see that module's table). |
 | `CameraSource.swift` | `camera/CameraSource.kt` | CameraX `ImageAnalysis` use case; emits `Flow<InputFrame>` via `callbackFlow` |
 | `PassiveSource.swift` | `camera/PassiveSource.kt` | `Channel<InputFrame>`-backed, `inject()` method |
 | `FileSource.swift` | `camera/FileSource.kt` | `MediaExtractor`/`MediaCodec` (or `MediaMetadataRetriever` for a simpler first pass — flag this as a decision point, see Phase 2 notes) |
@@ -224,3 +226,10 @@ module (`:app`) mirroring `Demo/VitalLensDemo`.
   profiling shows it's a bottleneck.
 - Networking: OkHttp chosen over Ktor for now (no KMP ambitions currently).
 - `FileSource` decode strategy: see Phase 2 note above.
+- `vitallens-core-android`'s `build.gradle.kts` currently declares
+  `implementation(projects.vitallensInference)`. If Phase 2's `Protocols.kt`
+  (`FaceDetecting.kt` etc.) exposes `Rect` (from `vitallens-inference`) in
+  its own public API surface, that needs to become `api(projects.vitallensInference)`
+  instead — `implementation` doesn't propagate the type to `vitallens-ui`/the
+  demo app's compile classpath. Revisit when `Protocols.kt` is actually
+  ported.
