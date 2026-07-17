@@ -11,6 +11,7 @@ lifecycleProcess = "2.9.4"
 coreKtx = "1.18.0"
 activityCompose = "1.13.0"
 junit = "4.13.2"
+mockitoKotlin = "5.4.0"
 vitallensCore = "0.3.3"
 
 [libraries]
@@ -41,6 +42,7 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-material3 = { module = "androidx.compose.material3:material3" }
 
 junit = { module = "junit:junit", version.ref = "junit" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }
 
 # Generated UniFFI Kotlin bindings + native libs for the Rust core (vitallens-core).
 # Published as an .aar; packaging="aar" in its POM, so this must resolve via
