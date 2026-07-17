@@ -120,6 +120,10 @@ vitallens-android/
 │   └── SessionAdapter.kt        # bridges to VitalLensCore.kt (generated)
 ├── vitallens/  # Android library: camera, face detection, image processing
 │   ├── camera/                # CameraSource (CameraX), PassiveSource, FileSource
+│   │                            # PassiveSource.inject(...) should take/convert to Bitmap
+│   │                            # synchronously at the call site — unlike CVPixelBuffer,
+│   │                            # android.media.Image isn't safe to buffer/consume later,
+│   │                            # it must be closed promptly by whoever receives it.
 │   ├── vision/                  # FaceDetector (ML Kit)
 │   ├── image/                    # ImageProcessor (pure Kotlin)
 │   ├── roi/                        # ROIStrategy, FaceROIStrategy
@@ -139,7 +143,13 @@ vitallens-android/
 Publishing split mirrors SPM: `vitallens` + `vitallens-ui`
 together form the "full SDK" product; `vitallens-inference` is usable
 standalone (headless / bring-your-own-frames via CoreML-analog custom
-strategies).
+strategies). "Standalone" means within an Android app that already owns/
+runs its own camera pipeline and just needs to push frames in — e.g. via
+`PassiveSource` — not a claim of usability outside Android entirely.
+`vitallens-inference` is `com.android.library` and depends on
+`com.rouast:vitallens-core`'s AAR, which only ships Android-ABI native
+libs in the artifact apps actually consume (`vitallens-core-jvm` is a
+separate, test-only artifact — see the Ground rules bullet on it).
 
 ## Concurrency mapping (Swift → Kotlin)
 
