@@ -40,4 +40,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    // Lets tests construct real Rust-backed UniFFI objects (BufferPlanner, Session)
+    // instead of throwing UnsatisfiedLinkError under the plain Android AAR above.
+    testImplementation(libs.vitallens.core.jvm)
 }

@@ -11,7 +11,7 @@ lifecycleProcess = "2.9.4"
 coreKtx = "1.18.0"
 activityCompose = "1.13.0"
 junit = "4.13.2"
-vitallensCore = "0.3.2"
+vitallensCore = "0.3.3"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -46,6 +46,12 @@ junit = { module = "junit:junit", version.ref = "junit" }
 # Published as an .aar; packaging="aar" in its POM, so this must resolve via
 # an Android-aware configuration (i.e. only from an com.android.library module).
 vitallens-core = { module = "com.rouast:vitallens-core", version.ref = "vitallensCore" }
+# Desktop JVM twin of the above: same com.rouast.vitallens.core package and Kotlin
+# bindings, but bundles darwin-aarch64/darwin-x86-64/linux-x86-64 native libs in a
+# plain jar (not an AAR) so real Rust-backed UniFFI objects (BufferPlanner, Session)
+# work inside plain `./gradlew test` JVM runs. Test/dev-only — never a main
+# dependency, never ships in the AAR we publish.
+vitallens-core-jvm = { module = "com.rouast:vitallens-core-jvm", version.ref = "vitallensCore" }
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }

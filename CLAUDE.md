@@ -25,6 +25,19 @@ Reference repos (read-only, added via `/add-dir`, never modify):
   floor. It brings `net.java.dev.jna:jna` (aar) and `kotlin-stdlib` as
   transitive dependencies and ships `jniLibs` for all four standard ABIs;
   generated classes live under `com.rouast.vitallens.core`.
+- Testing code that constructs real native-backed UniFFI objects (`BufferPlanner`,
+  `Session` — anything holding a JNA pointer, not a plain generated data class):
+  add `testImplementation(libs.vitallens.core.jvm)`. `com.rouast:vitallens-core-jvm`
+  is a desktop-JVM twin of the Android AAR (same `com.rouast.vitallens.core`
+  package/bindings, plain jar instead of an AAR) that bundles
+  `darwin-aarch64`/`darwin-x86-64`/`linux-x86-64` native libs at the paths JNA's
+  desktop loader expects, so `./gradlew test` can exercise the real Rust logic —
+  the same guarantee Swift's `swift test` gets for free from the macOS slice baked
+  into `VitalLensCoreFFI.xcframework`. Test/dev-only: never a main dependency,
+  never ships in our AAR. Plain generated data classes (`Rect`, `BufferConfig`,
+  `SessionConfig`, `InferenceCommand`, etc.) have no native pointer and already
+  work in plain JVM tests without this — only add it when a test actually needs
+  to construct/call a `Disposable`/`AutoCloseable` FFI object.
 - Prefer small, reviewable PRs/commits over one big dump. Build one file or
   one small group of related files at a time, run `./gradlew build`, then move on.
 - No native code (no libyuv/JNI for image processing) in the first pass —
