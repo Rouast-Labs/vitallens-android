@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Not required: CameraSource needs it, but PassiveSource/FileSource don't, and this SDK
+         must stay embeddable in apps that don't want camera listed as a hard requirement. -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+</manifest>
