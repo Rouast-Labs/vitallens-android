@@ -47,4 +47,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // android.graphics.Bitmap / androidx.camera.view.PreviewView are "Stub!"-throwing
+    // placeholders under a plain JVM unit test (no Robolectric here) — needed to fake
+    // references for tests that don't care about real pixel/view behavior.
+    testImplementation(libs.mockito.kotlin)
 }

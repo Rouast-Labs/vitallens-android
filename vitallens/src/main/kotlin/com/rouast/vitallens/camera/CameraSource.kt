@@ -23,6 +23,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** Frame hand-off buffer size between capture and whatever consumes [CameraSource.stream]. */
+private const val FRAME_CHANNEL_CAPACITY = 8
+
 /**
  * Converts CameraX's clockwise rotation-to-upright degrees (0/90/180/270, from
  * [ImageProxy.getImageInfo]'s `rotationDegrees` — already accounting for sensor mounting and
@@ -55,8 +58,12 @@ internal fun rotationDegreesToOrientation(degrees: Int): ImageOrientation =
  */
 class CameraSource(private val context: Context) : CameraStreaming {
 
+    // An explicit capacity, not Channel.BUFFERED: combined with a non-SUSPEND onBufferOverflow,
+    // Channel.BUFFERED collapses to a hardcoded capacity of 1 (a ConflatedBufferedChannel) —
+    // confirmed via decompiling kotlinx-coroutines-core's Channel() factory — which would silently
+    // keep only the single latest frame rather than smoothing over brief consumer backpressure.
     private val channel = Channel<InputFrame>(
-        capacity = Channel.BUFFERED,
+        capacity = FRAME_CHANNEL_CAPACITY,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     override val stream: Flow<InputFrame> = channel.receiveAsFlow()
