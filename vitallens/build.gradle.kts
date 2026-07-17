@@ -29,7 +29,10 @@ kotlin {
 }
 
 dependencies {
-    implementation(projects.vitallensInference)
+    // api, not implementation: Protocols.kt (FaceDetecting, CameraStreaming, InputFrame)
+    // exposes Rect/ImageOrientation from vitallens-inference in this module's own public API,
+    // so downstream consumers (vitallens-ui, the demo app) need it on their compile classpath.
+    api(projects.vitallensInference)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.process)
