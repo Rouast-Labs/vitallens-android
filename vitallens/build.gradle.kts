@@ -10,6 +10,7 @@ android {
 
     defaultConfig {
         minSdk = 26
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -51,4 +52,14 @@ dependencies {
     // placeholders under a plain JVM unit test (no Robolectric here) — needed to fake
     // references for tests that don't care about real pixel/view behavior.
     testImplementation(libs.mockito.kotlin)
+
+    // Real-device/emulator instrumented tests (androidTest, not test) for CameraSource/
+    // FaceDetector/FileSource — the parts that need a real Android runtime, ML Kit, and a
+    // real camera to verify meaningfully rather than just compile.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

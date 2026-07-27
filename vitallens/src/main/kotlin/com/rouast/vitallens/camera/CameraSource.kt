@@ -15,11 +15,13 @@ import com.rouast.vitallens.CameraStreaming
 import com.rouast.vitallens.InputFrame
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.VitalLensException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -93,16 +95,27 @@ class CameraSource(private val context: Context) : CameraStreaming {
         pendingPreviewView?.let { preview.surfaceProvider = it.surfaceProvider }
         previewUseCase = preview
 
-        provider.unbindAll()
-        provider.bindToLifecycle(ProcessLifecycleOwner.get(), CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
+        // CameraX's bind/unbind calls require the main thread; start() itself is callable from
+        // any dispatcher (that's the point of it being suspend), so this must hop explicitly
+        // rather than assume the caller is already there. Caught by an instrumented test on a
+        // real emulator (IllegalStateException: Not in application's main thread) — this can't
+        // be verified on a plain JVM unit test at all.
+        withContext(Dispatchers.Main) {
+            provider.unbindAll()
+            provider.bindToLifecycle(ProcessLifecycleOwner.get(), CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
+        }
         cameraProvider = provider
     }
 
     override fun stop() {
-        cameraProvider?.unbindAll()
+        val provider = cameraProvider
         cameraProvider = null
         previewUseCase = null
         channel.close()
+        // Fire-and-forget onto the main thread, matching Swift's own queue.async { session.stopRunning() }
+        // — stop() itself isn't suspend (matches CameraStreaming's synchronous contract), so this
+        // can't await completion, only dispatch it.
+        provider?.let { ContextCompat.getMainExecutor(context).execute { it.unbindAll() } }
     }
 
     override fun showPreview(view: PreviewView) {
