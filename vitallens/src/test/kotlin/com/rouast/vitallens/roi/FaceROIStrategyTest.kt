@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
 
@@ -32,6 +33,16 @@ class FaceROIStrategyTest {
     }
 
     private val dummyBitmap = mock<Bitmap>()
+
+    /**
+     * ROICalculator.calculateROI's first call pays one-off JNA native-lib load/JIT warmup
+     * cost that can itself exceed the small millisecond-scale delays these tests use to
+     * assert throttling behavior. Pay that cost here, outside any timing-sensitive assertion.
+     */
+    @Before
+    fun warmUpNativeCalculator() {
+        ROICalculator.calculateROI(Rect(0f, 0f, 1f, 1f), "face")
+    }
 
     @Test
     fun `first call triggers detection but returns null until it completes`() = runBlocking {
