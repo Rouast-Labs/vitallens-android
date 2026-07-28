@@ -51,8 +51,8 @@ private val DEFAULT_INSTRUCTION_2 = GuideInstruction(Icons.Filled.PauseCircleFil
  * A reusable screen presented before a scanning or monitoring session begins. Displays
  * instructional guides, timing hints, and an optional Eco/Standard mode toggle.
  *
- * [currentMode]/[onModeChange] together are the Compose "hoisted state" equivalent of Swift's
- * `@Binding public var currentMode`.
+ * [currentMode]/[onModeChange] together hoist the mode selection to the caller, so a single mode
+ * value can stay in sync between this screen and whatever session it configures.
  */
 @Composable
 fun StartScreen(

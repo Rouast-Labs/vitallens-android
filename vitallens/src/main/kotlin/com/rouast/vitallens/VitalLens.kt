@@ -28,12 +28,10 @@ import java.io.Closeable
  * The primary client for the VitalLens API and local inference.
  * Handles initialization, configuration, and stream lifecycle management.
  *
- * [context] has no Swift equivalent: it's needed to construct the default [CameraSource] and to
- * pass through to [FileProcessor] for [processVideoFile]. [proxyUrl] is [HttpUrl] rather than a
- * generic URL type, matching [ApiInference]'s own parameter type (this codebase uses OkHttp
- * throughout, not a platform-agnostic URL abstraction). `debugMode`/`debugLatestCrop` are
- * dropped, consistent with `ImageProcessor.kt`/`StreamProcessor.kt` having already dropped the
- * same.
+ * [context] is needed to construct the default [CameraSource] and to pass through to
+ * [FileProcessor] for [processVideoFile]. [proxyUrl] is [HttpUrl] rather than a generic URL type,
+ * matching [ApiInference]'s own parameter type — this codebase uses OkHttp throughout, not a
+ * platform-agnostic URL abstraction.
  */
 class VitalLens private constructor(
     private val context: Context,
@@ -131,16 +129,13 @@ class VitalLens private constructor(
         scope.launch { runCatching { streamProcessor?.resume() } }
     }
 
-    // MARK: - Public API
-
     /**
      * Starts the live camera stream and begins the inference loop.
      *
      * @param preview An optional view to render the live camera feed into.
-     * @return A hot flow yielding continuous [VitalLensResult] updates. Unlike Swift's
-     *   `AsyncStream`, this flow has no "finished" signal — [stopStream] does not complete it,
-     *   consumers manage their own collection lifecycle (matching [StreamProcessor.start]'s own
-     *   `SharedFlow` semantics).
+     * @return A hot flow yielding continuous [VitalLensResult] updates. This flow has no
+     *   "finished" signal — [stopStream] does not complete it, consumers manage their own
+     *   collection lifecycle (matching [StreamProcessor.start]'s own `SharedFlow` semantics).
      */
     suspend fun startStream(preview: PreviewView? = null): SharedFlow<VitalLensResult> {
         val processor = streamProcessor ?: run {
@@ -187,8 +182,8 @@ class VitalLens private constructor(
 
     /**
      * Permanently releases resources: removes the lifecycle observer and closes the underlying
-     * [StreamProcessor]. Kotlin-only — unlike Swift's ARC-driven `deinit`, the JVM has no
-     * deterministic cleanup hook.
+     * [StreamProcessor]. The JVM has no deterministic destructor, so callers must call this
+     * explicitly once the client is no longer needed.
      */
     override fun close() {
         Handler(Looper.getMainLooper()).post {

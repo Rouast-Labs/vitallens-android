@@ -49,7 +49,7 @@ class BufferManagerTest {
         return manager to config
     }
 
-    // MARK: - Initialization
+    // Initialization
 
     @Test
     fun `initialize sets up the planner`() = runTest {
@@ -58,7 +58,7 @@ class BufferManagerTest {
         assertNull(cmd)
     }
 
-    // MARK: - Target Registration
+    // Target Registration
 
     @Test
     fun `registerTarget creates a new buffer for a new target`() = runTest {
@@ -93,7 +93,7 @@ class BufferManagerTest {
         assertNotEquals(active[0].id, active[1].id)
     }
 
-    // MARK: - Appending & Polling
+    // Appending & Polling
 
     @Test
     fun `append accumulates frames and flush poll returns all of them`() = runTest {
@@ -164,7 +164,7 @@ class BufferManagerTest {
         assertNull(executed)
     }
 
-    // MARK: - Execution
+    // Execution
 
     @Test
     fun `execute extracts frames across successive calls`() = runTest {
@@ -182,7 +182,7 @@ class BufferManagerTest {
         assertEquals(5, payload2?.size)
     }
 
-    // MARK: - State & Lifecycle
+    // State & Lifecycle
 
     @Test
     fun `state management stores and overwrites the current state`() = runTest {

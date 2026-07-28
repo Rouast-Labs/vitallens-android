@@ -33,13 +33,13 @@ import java.io.FileOutputStream
 
 /**
  * Needs a real Android runtime (Context + MediaMetadataRetriever, both via FileSource), so this
- * lives under androidTest rather than test — mirrors FileSourceInstrumentedTest's placement.
+ * lives under androidTest rather than test — same placement rationale as
+ * FileSourceInstrumentedTest.
  *
- * Uses a small synthetic solid-white 128x128/30fps/30-frame video (matching Swift's own
- * synthetic-video test helper almost exactly) rather than the real sample_video_2.mp4 dataset
- * asset: the detector/strategy here are fakes that never look at actual pixel content, and
- * FileSource's per-frame seek-and-decode is too slow to run over the full ~630-frame real video
- * in a test.
+ * Uses a small synthetic solid-white 128x128/30fps/30-frame video rather than the real
+ * sample_video_2.mp4 dataset asset: the detector/strategy here are fakes that never look at
+ * actual pixel content, and FileSource's per-frame seek-and-decode is too slow to run over the
+ * full ~630-frame real video in a test.
  */
 @RunWith(AndroidJUnit4::class)
 class FileProcessorInstrumentedTest {

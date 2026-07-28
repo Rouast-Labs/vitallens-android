@@ -26,26 +26,17 @@ internal fun computeCropRect(bitmapWidth: Int, bitmapHeight: Int, roi: Rect): Cr
 }
 
 /**
- * Crops, scales, rotates, and reflects video frames to a target size, mirroring Swift's
- * ImageProcessor.
+ * Crops, scales, rotates, and reflects video frames to a target size.
  *
- * Unified relative to Swift's source, which has two near-duplicate pipelines (`process`
- * producing flattened RGB `Data` for the API, `processToPixelBuffer` producing a `CVPixelBuffer`
- * for local CoreML inference) branching on raw YUV-vs-BGRA `CVPixelBuffer` input. Neither
- * distinction applies here: every frame that reaches this object is already a [Bitmap] —
- * CameraSource/FileSource/PassiveSource all normalize to Bitmap before a frame is ever buffered
- * (raw `Image`/YUV isn't safe to hold onto past the capture callback) — and
- * `LocalInferenceBase.predict` already consumes `List<Bitmap>` directly, so there's no separate
- * "pixel buffer" output shape to produce. [process] returns a [Bitmap] usable directly for local
- * inference; [toRgbBytes] is the small extra step the API path needs on top of that.
+ * A single pipeline serves both destinations: [process] returns a [Bitmap] usable directly for
+ * local inference (`LocalInferenceBase.predict` consumes `List<Bitmap>` directly), and
+ * [toRgbBytes] is the small extra step the API path needs on top of that. Every frame that
+ * reaches this object is already a [Bitmap] — CameraSource/FileSource/PassiveSource all normalize
+ * to Bitmap before a frame is ever buffered, since raw `Image`/YUV data isn't safe to hold onto
+ * past the capture callback — so there's no separate raw-pixel-buffer path to support.
  *
- * No manual buffer allocation/reallocation either: Swift's vImage buffers are raw malloc'd memory
- * needing explicit lifecycle management (allocateBuffers/freeBuffers/checkAndReallocate).
- * `Bitmap.createBitmap` allocates what it needs per call — nothing to pre-size or free.
- *
- * `debugMode`/`lastProcessedCGImage` are dropped entirely: they exist in Swift only because
- * vImage's raw ARGB buffers aren't directly viewable without conversion to `CGImage`. Our output
- * is already a `Bitmap` — already viewable/debuggable — so there's nothing to convert.
+ * No manual buffer allocation/reallocation is needed either: `Bitmap.createBitmap` allocates
+ * exactly what it needs per call, with nothing to pre-size, reuse, or free explicitly.
  */
 object ImageProcessor {
 

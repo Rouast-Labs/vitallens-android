@@ -45,12 +45,10 @@ data class ApiState(val data: List<Float>) : InferenceState
 /**
  * Remote inference strategy: handles all network communication with the VitalLens API.
  *
- * `actor` -> Mutex-guarded class, per CLAUDE.md's concurrency mapping. Only [resolveConfig] and
- * [bufferConfig] touch shared mutable state ([config]); [resolveModel]/[inferStream]/[inferFile]
- * don't, so they aren't serialized through the same mutex — matching the actual data-race-freedom
- * requirement rather than literally serializing every method the way Swift's actor isolation
- * would (which would otherwise force unrelated concurrent network calls to queue behind
- * each other for no correctness benefit).
+ * Only [resolveConfig] and [bufferConfig] touch shared mutable state ([config]), so only those
+ * are guarded by [mutex]; [resolveModel]/[inferStream]/[inferFile] don't touch it and aren't
+ * serialized through the same lock — otherwise unrelated concurrent network calls would queue
+ * behind each other for no correctness benefit.
  */
 class ApiInference(
     private val apiKey: String? = null,
@@ -72,7 +70,7 @@ class ApiInference(
             ?: environment["VITALLENS_BASE_URL"]?.toHttpUrlOrNull()
             ?: PRODUCTION_BASE_URL
 
-    // MARK: - Configuration
+    // Configuration
 
     /** Contacts the API to determine the optimal configuration for the requested model. */
     suspend fun resolveModel(requestedModel: String?): ResolveModelResponse {
@@ -120,10 +118,10 @@ class ApiInference(
             if (model != null) put("model", model)
         }
 
-        // ByteArray (not the String overload) toRequestBody: the String overload adds
-        // "; charset=utf-8" to the media type it wasn't given one, since it must declare
-        // whatever charset it used to encode the string — an accurate but Swift-parity-breaking
-        // header value we don't need since we've already encoded to UTF-8 bytes ourselves.
+        // ByteArray (not the String overload) toRequestBody: the String overload appends
+        // "; charset=utf-8" to the media type, since it has to declare whatever charset it used
+        // to encode the string. We've already encoded to UTF-8 bytes ourselves, so that header
+        // value would just be unnecessary noise on the wire.
         val request = Request.Builder()
             .url(url)
             .applyAuthHeaders()
@@ -133,9 +131,11 @@ class ApiInference(
 
         val result = perform(request, VitalLensResultSerializer)
 
-        // result.time is always empty per VitalLensResult's decode (see model/VitalLensResult.kt),
-        // so this condition really just means "sampleCount is present" — ported faithfully from
-        // the Swift source, including its side effect of dropping rollingVitals in that case.
+        // result.time is always empty at this point (VitalLensResult's own decode never populates
+        // it from the raw response — see model/VitalLensResult.kt), so this condition really just
+        // tests "sampleCount is present," which signals a fully-aggregated response rather than a
+        // per-chunk one. rollingVitals only makes sense for a partial/in-progress window, so it's
+        // cleared here too once the result is final.
         return if (result.time.isEmpty() && result.sampleCount != null) {
             result.copy(time = emptyList(), rollingVitals = null)
         } else {
@@ -143,7 +143,7 @@ class ApiInference(
         }
     }
 
-    // MARK: - InferenceStrategy Conformance
+    // InferenceStrategy Conformance
 
     /** Resolves and caches the configuration for the active model. */
     override suspend fun resolveConfig(): ModelConfig = mutex.withLock {
@@ -225,7 +225,7 @@ class ApiInference(
         return InferenceOutcome(cleanResult, nextState)
     }
 
-    // MARK: - Private Helpers
+    // Private Helpers
 
     private fun Request.Builder.applyAuthHeaders(): Request.Builder {
         if (proxyUrl == null && resolvedApiKey != null) {

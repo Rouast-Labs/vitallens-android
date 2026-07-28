@@ -17,7 +17,7 @@ import org.junit.Test
 
 class SessionAdapterTest {
 
-    // MARK: - Configuration Mapping
+    // Configuration Mapping
 
     @Test
     fun `ModelConfig maps to SessionConfig`() {
@@ -37,7 +37,7 @@ class SessionAdapterTest {
         assertEquals(listOf("heart_rate", "sbp"), rustConfig.supportedVitals)
     }
 
-    // MARK: - Geometry Mapping
+    // Geometry Mapping
 
     @Test
     fun `Rect maps to the generated core Rect`() {
@@ -50,7 +50,7 @@ class SessionAdapterTest {
         assertEquals(40.0f, rustRect.height, 0.0001f)
     }
 
-    // MARK: - Result to Input Mapping
+    // Result to Input Mapping
 
     @Test
     fun `VitalLensResult maps waveforms and timestamps into SessionInput signals`() {
@@ -90,7 +90,7 @@ class SessionAdapterTest {
         assertNull(emptyInput.face)
     }
 
-    // MARK: - Session to Result Mapping
+    // Session to Result Mapping
 
     @Test
     fun `SessionResult maps into VitalLensResult with overrides applied`() {

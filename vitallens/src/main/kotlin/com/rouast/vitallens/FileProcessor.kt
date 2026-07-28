@@ -39,8 +39,9 @@ private val Rect.midY: Float get() = y + height / 2f
  * - Pass 2 (Inference): Processes frames using the stable ROI and batches them for the inference
  *   strategy.
  *
- * [context] and [uri] replace Swift's single `url: URL` parameter: [FileSource] needs an Android
- * `Context` to construct (unlike `AVAssetReader`, which only needs the file URL itself).
+ * Takes both [context] and [uri] rather than just a file path: [FileSource] needs an Android
+ * `Context` to construct (to access `MediaExtractor`/`MediaCodec` and content resolution), not
+ * just the file's location.
  */
 class FileProcessor(
     private val context: Context,

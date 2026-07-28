@@ -149,9 +149,8 @@ private fun imageToBitmap(image: Image): Bitmap {
 /**
  * A helper class to read video frames from a local file [Uri].
  *
- * Uses [MediaExtractor] + [MediaCodec] for sequential, in-order decoding — matching Swift's
- * `AVAssetReader`/`AVAssetReaderTrackOutput.copyNextSampleBuffer()`, which is also pure sequential
- * decode with no seeking at all. An earlier version used `MediaMetadataRetriever.getFrameAtTime`
+ * Uses [MediaExtractor] + [MediaCodec] for sequential, in-order decoding — pure sequential decode
+ * with no seeking at all. An earlier version used `MediaMetadataRetriever.getFrameAtTime`
  * (the "start simple" choice originally flagged in CLAUDE.md) — simpler, but each frame
  * extraction independently sought and decoded, which measured at ~265ms/frame against a real
  * 630-frame video on a real device (97.8% of a real end-to-end file-processing integration test's
@@ -269,8 +268,10 @@ class FileSource private constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Matches Swift's behavior: a failure mid-read ends the stream rather than
-            // propagating, since FileSource.from() already validated the file/track exist.
+            // A failure mid-read ends the stream rather than propagating, since FileSource.from()
+            // already validated the file/track exist — by this point we're mid-decode, and a
+            // partial result (whatever frames were already emitted) is more useful to the caller
+            // than an exception that discards everything decoded so far.
             Log.e(LOG_TAG, "Error reading frames", e)
         } finally {
             codec?.let {
@@ -328,10 +329,9 @@ class FileSource private constructor(
                     uri = uri,
                     naturalSize = Size(width, height),
                     nominalFrameRate = frameRate,
-                    // MediaMetadataRetriever reports rotation directly as degrees, unlike
-                    // AVFoundation's preferredTransform affine matrix — no need to port Swift's
-                    // calculateOrientation matrix decomposition, this reuses the already-tested
-                    // rotationDegreesToOrientation from CameraSource.kt.
+                    // MediaMetadataRetriever reports rotation directly as degrees, so this can
+                    // reuse the already-tested rotationDegreesToOrientation from CameraSource.kt
+                    // rather than needing any separate matrix decomposition.
                     orientation = rotationDegreesToOrientation(rotation),
                     durationMs = durationMsValue,
                 )

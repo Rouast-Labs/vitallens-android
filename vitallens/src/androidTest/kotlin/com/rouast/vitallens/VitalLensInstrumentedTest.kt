@@ -125,11 +125,11 @@ class VitalLensInstrumentedTest {
     // on a real Android/Dalvik runtime — that's a plain-JVM-unit-test-only trick. A real Android
     // runtime makes a real Bitmap cheap to construct instead, sidestepping the need to mock it.
     //
-    // 100x100, matching Swift's own createDummyBuffer(): these tests (unlike StreamProcessorTest,
-    // which always supplies an explicit stub transformer) exercise StreamProcessor's *default*
-    // transformer, which crops the configured ROI out of this bitmap for real via ImageProcessor
-    // — a too-small bitmap makes that crop fail, which processFrame's catch-all silently swallows
-    // (matching Swift), so frames would never actually make it into the buffer.
+    // 100x100: these tests (unlike StreamProcessorTest, which always supplies an explicit stub
+    // transformer) exercise StreamProcessor's *default* transformer, which crops the configured
+    // ROI out of this bitmap for real via ImageProcessor — a too-small bitmap makes that crop
+    // fail, which processFrame's catch-all silently swallows, so frames would never actually make
+    // it into the buffer.
     private val dummyBitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
 
     @Before

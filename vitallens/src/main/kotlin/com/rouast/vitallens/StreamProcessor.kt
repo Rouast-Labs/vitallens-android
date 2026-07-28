@@ -55,17 +55,15 @@ private val defaultFrameTransformer: FrameTransformer = { bitmap, roi, config, o
  * The core engine that coordinates the camera, ROI tracking, buffering, and the background
  * inference loop.
  *
- * Mirrors Swift's `StreamProcessor` actor: serialized state access becomes an explicit [Mutex],
- * kept to short, non-suspending critical sections that match where the Swift actor implicitly
- * releases exclusivity at each `await` — [Mutex] does not do this automatically, so holding it
- * across a suspend call (e.g. a network-backed [InferenceStrategy.infer]) would block
- * [processFrame] for the call's entire duration. The background inference/frame-forwarding
- * `Task`s become [scope]-owned jobs. `debugMode`/`defaultImageProcessor`/`debugImage` are
- * dropped, consistent with `ImageProcessor.kt` having already dropped the same on that side.
+ * State that multiple coroutines can touch concurrently is guarded by an explicit [Mutex], held
+ * only across short, non-suspending critical sections: holding it across a suspend call (e.g. a
+ * network-backed [InferenceStrategy.infer]) would block every other caller — including
+ * [processFrame] on the hot per-frame path — for that call's entire duration, so any suspending
+ * work happens outside the lock. The background inference/frame-forwarding loops are jobs owned
+ * by [scope].
  *
- * [camera] has no default (unlike Swift's `camera ?? CameraSource()`): `CameraSource` requires an
- * Android `Context` to construct, which this class has no business owning — callers construct it
- * and pass it in.
+ * [camera] has no default: `CameraSource` requires an Android `Context` to construct, which this
+ * class has no business owning — callers construct it and pass it in.
  */
 class StreamProcessor(
     private val strategy: InferenceStrategy,
@@ -94,7 +92,8 @@ class StreamProcessor(
     /**
      * Read from [processFrame] on every frame and written from [pause]/[resume]/[stop] — kept
      * outside [mutex] as a simple visibility-only flag rather than adding suspend-only gating to
-     * hot per-frame code and to [stop], which mirrors Swift's synchronous (non-`async`) signature.
+     * hot per-frame code, and because [stop] itself is a plain, non-suspending function that
+     * callers can invoke synchronously (e.g. from cleanup code with no coroutine scope at hand).
      */
     @Volatile private var isPaused: Boolean = false
 
@@ -232,7 +231,8 @@ class StreamProcessor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Silently ignore transformation errors for individual frames, matching Swift.
+                // A single bad frame (e.g. a transient decode failure) shouldn't take down the
+                // whole stream — drop it and keep processing subsequent frames.
             }
         }
 
@@ -298,9 +298,9 @@ class StreamProcessor(
     }
 
     /**
-     * Permanently releases native resources. Kotlin-only — unlike Swift's ARC-driven `deinit`,
-     * the JVM has no deterministic cleanup hook, so this is called explicitly once the processor
-     * is no longer needed. Unlike [stop], this cannot be undone with another [start].
+     * Permanently releases native resources. The JVM has no deterministic destructor, so this must
+     * be called explicitly once the processor is no longer needed. Unlike [stop], this cannot be
+     * undone with another [start].
      */
     override fun close() {
         stop()

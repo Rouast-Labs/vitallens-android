@@ -3,10 +3,10 @@ package com.rouast.vitallens.inference
 /**
  * Errors specific to the VitalLens SDK and API interactions.
  *
- * [DecodingError] and [NetworkError] compare equal by their underlying
- * cause's [Throwable.message] rather than by instance identity, mirroring
- * the Swift original's `localizedDescription`-based equality (arbitrary
- * wrapped errors aren't required to be structurally comparable).
+ * [DecodingError] and [NetworkError] compare equal by their underlying cause's
+ * [Throwable.message] rather than by instance identity, since the wrapped causes (arbitrary
+ * exceptions from the JSON/network layers) aren't required to be structurally comparable —
+ * comparing by message is the only equality that's actually meaningful for them.
  */
 sealed class VitalLensException(
     message: String,

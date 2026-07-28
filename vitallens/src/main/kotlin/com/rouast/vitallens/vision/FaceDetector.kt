@@ -26,11 +26,9 @@ internal fun orientationToRotationDegrees(orientation: ImageOrientation): Int = 
 
 /**
  * Normalizes an ML Kit face bounding box (pixel coordinates, top-left origin, relative to the
- * already rotation-corrected [InputImage]) to 0.0-1.0 and applies the mirroring flip.
- *
- * Unlike Vision's `boundingBox` (bottom-left origin, needing a Y-flip), ML Kit already reports
- * top-left coordinates — so this needs only the mirroring adjustment Swift's
- * `convertVisionToTopLeft` also applies, not an origin conversion too.
+ * already rotation-corrected [InputImage]) to 0.0-1.0 and applies the mirroring flip. ML Kit
+ * already reports top-left-origin coordinates, so no Y-axis flip is needed here — just the
+ * normalization and the mirroring adjustment.
  */
 internal fun normalizeFaceBox(
     left: Int,
@@ -54,10 +52,10 @@ internal fun normalizeFaceBox(
 /**
  * Detects faces in video frames using ML Kit's Face Detection API.
  *
- * [close] is a Kotlin-only addition with no Swift equivalent: ML Kit's `FaceDetector` client
- * holds native resources and implements `Closeable`, unlike Vision's
- * `VNDetectFaceRectanglesRequest`, which needs no explicit cleanup — same category of divergence
- * as `BufferManager.close()`.
+ * [close] exists because ML Kit's underlying `FaceDetector` client holds native resources and
+ * implements `Closeable` — callers must release it explicitly once detection is no longer needed,
+ * the same category of cleanup [com.rouast.vitallens.inference.buffer.BufferManager.close] handles
+ * for its own native pointer.
  */
 class FaceDetector : FaceDetecting, Closeable {
 

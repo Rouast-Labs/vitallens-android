@@ -3,10 +3,9 @@ package com.rouast.vitallens.ui
 /**
  * The performance/accuracy tradeoff for a scan or monitor session.
  *
- * Swift defines this in `VitalLensMonitorView.swift` (shared from there via `Binding`/`initialMode`
- * params on Scan/Start too); it lives in its own file here instead, since [StartScreen] needs it
- * before `MonitorScreen.kt` exists, and Kotlin has no equivalent reason to couple a shared type's
- * declaration site to one particular consumer.
+ * Lives in its own file rather than inside any one screen: [StartScreen], `ScanScreen.kt`,
+ * `MonitorScreen.kt`, and `FileScreen.kt` all reference it, so it belongs to none of them
+ * specifically.
  */
 enum class VitalLensMode {
     STANDARD,

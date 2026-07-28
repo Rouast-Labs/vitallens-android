@@ -12,9 +12,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Ports ImageProcessorTests.swift's quadrant-corner-color tests: rather than trust the
- * crop/scale/rotate/mirror Matrix composition by derivation alone, verify it empirically against
- * bitmaps with distinctly colored corners and check where each corner actually lands.
+ * Rather than trust the crop/scale/rotate/mirror Matrix composition by derivation alone, verify
+ * it empirically against bitmaps with distinctly colored corners and check where each corner
+ * actually lands.
  */
 @RunWith(AndroidJUnit4::class)
 class ImageProcessorInstrumentedTest {
@@ -25,8 +25,7 @@ class ImageProcessorInstrumentedTest {
         return bitmap
     }
 
-    /** Quadrants: TL=Red, TR=Green, BL=Blue, BR=White — matches
-     * ImageProcessorTests.swift's createQuadrantBGRAPixelBuffer exactly. */
+    /** Quadrants: TL=Red, TR=Green, BL=Blue, BR=White. */
     private fun createQuadrantBitmap(size: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)

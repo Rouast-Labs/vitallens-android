@@ -31,8 +31,7 @@ private const val FRAME_CHANNEL_CAPACITY = 8
 /**
  * Converts CameraX's clockwise rotation-to-upright degrees (0/90/180/270, from
  * [ImageProxy.getImageInfo]'s `rotationDegrees` — already accounting for sensor mounting and
- * current display rotation) into [ImageOrientation]. No direct Swift equivalent: Swift derives
- * this from `UIDevice` orientation-change notifications instead, which CameraX makes unnecessary.
+ * current display rotation) into [ImageOrientation].
  */
 internal fun rotationDegreesToOrientation(degrees: Int): ImageOrientation =
     when (((degrees % 360) + 360) % 360) {
@@ -44,18 +43,16 @@ internal fun rotationDegreesToOrientation(degrees: Int): ImageOrientation =
 
 /**
  * A camera source that captures video frames using CameraX and provides a [Flow] of [InputFrame]
- * objects, mirroring Swift's AVFoundation-based `CameraSource`.
+ * objects.
  *
  * Uses [ProcessLifecycleOwner] rather than requiring a caller-supplied
- * [androidx.lifecycle.LifecycleOwner], matching Swift's zero-config `init()` — callers only need
- * [start]/[stop], not lifecycle wiring. Requests RGBA_8888 output directly from CameraX
- * ([ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888]), so no manual YUV conversion is needed here —
- * unlike Swift, which gets pre-converted BGRA `CVPixelBuffer`s from AVFoundation for free,
- * CameraX's default YUV_420_888 output would otherwise need one.
+ * [androidx.lifecycle.LifecycleOwner], so callers only need [start]/[stop], not lifecycle wiring.
+ * Requests RGBA_8888 output directly from CameraX ([ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888]),
+ * so no manual YUV conversion is needed here — CameraX's default YUV_420_888 output would
+ * otherwise require one.
  *
- * Camera permission is only checked, never requested: unlike iOS's
- * `AVCaptureDevice.requestAccess(for:)`, Android has no API for library code to prompt for a
- * runtime permission without an `Activity` — the host app must request
+ * Camera permission is only checked, never requested: Android has no API for library code to
+ * prompt for a runtime permission without an `Activity` — the host app must request
  * [Manifest.permission.CAMERA] itself before calling [start].
  */
 class CameraSource(private val context: Context) : CameraStreaming {
@@ -112,8 +109,8 @@ class CameraSource(private val context: Context) : CameraStreaming {
         cameraProvider = null
         previewUseCase = null
         channel.close()
-        // Fire-and-forget onto the main thread, matching Swift's own queue.async { session.stopRunning() }
-        // — stop() itself isn't suspend (matches CameraStreaming's synchronous contract), so this
+        // Fire-and-forget onto the main thread: unbindAll() must run on the main thread, but
+        // stop() itself isn't suspend (matching CameraStreaming's synchronous contract), so this
         // can't await completion, only dispatch it.
         provider?.let { ContextCompat.getMainExecutor(context).execute { it.unbindAll() } }
     }

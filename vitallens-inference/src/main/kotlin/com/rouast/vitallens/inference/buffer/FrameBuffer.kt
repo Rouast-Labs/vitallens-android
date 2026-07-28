@@ -12,9 +12,8 @@ import com.rouast.vitallens.inference.network.ModelConfig
  * over time. Manages an internal sliding window, automatically dropping the oldest frames when
  * its maximum capacity is reached, and executes extraction commands issued by the buffer planner.
  *
- * Owned exclusively by [BufferManager] — no concurrency primitives needed here, matching the
- * Swift original (only [BufferManager], an actor/Mutex-guarded class, is safe to call from
- * multiple coroutines).
+ * Owned exclusively by [BufferManager], which is Mutex-guarded — callers never touch a
+ * [FrameBuffer] concurrently, so this class itself needs no locking of its own.
  */
 class FrameBuffer(
     val id: String,

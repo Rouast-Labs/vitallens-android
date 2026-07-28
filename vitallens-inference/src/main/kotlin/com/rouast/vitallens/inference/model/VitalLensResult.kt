@@ -57,15 +57,16 @@ data class VitalLensResult(
 }
 
 /**
- * Manual JSON (de)serialization mirroring the Swift source's dynamic-key handling:
+ * Manual JSON (de)serialization, needed because `vitals`/`waveforms` have dynamic (server-defined)
+ * keys that a generated `@Serializable` mapping can't express directly:
  * - [VitalLensResult.time] is always empty on decode; it's synthesized elsewhere from frame
  *   timestamps and never read from the raw API response.
  * - `vitals`/`waveforms` entries are decoded individually and a malformed entry is skipped
  *   rather than failing the whole response; `rolling_vitals` is decoded strictly (all-or-nothing).
- * - `model_used`/`n` are the decode keys, but `modelUsed`/`sampleCount` (camelCase) are the
- *   encode keys — an asymmetry carried over verbatim from the Swift source, whose manual decode
- *   reads the API's snake_case wire format while its `Codable` conformance encodes using its own
- *   Swift-cased `CodingKeys`.
+ * - `model_used`/`n` are the decode keys (matching the API's snake_case wire format), but
+ *   `modelUsed`/`sampleCount` (camelCase) are the encode keys — decode and encode serve different
+ *   purposes (reading the live API response vs. producing this type's own JSON representation
+ *   elsewhere), so they don't need matching key casing.
  */
 object VitalLensResultSerializer : KSerializer<VitalLensResult> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("VitalLensResult")

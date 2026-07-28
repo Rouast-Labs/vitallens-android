@@ -49,10 +49,10 @@ class ApiInferenceTest {
 
     /**
      * Redirects every outgoing request's scheme/host/port to [server], regardless of what
-     * ApiInference itself computed as the base URL — mirroring the Swift test suite's
-     * transport-level URLProtocol interception, which mocks networking without caring which
-     * URL was dialed. The pre-redirect URL is captured in [capturedUrls] so tests can still
-     * assert on the URL/host ApiInference actually intended to use.
+     * ApiInference itself computed as the base URL — so tests can point ApiInference at whatever
+     * base URL they want to assert on while every request still actually lands on the local mock
+     * server. The pre-redirect URL is captured in [capturedUrls] so tests can still assert on the
+     * URL/host ApiInference actually intended to use.
      */
     private fun redirectingClient(): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(Interceptor { chain ->
@@ -121,7 +121,7 @@ class ApiInferenceTest {
         return listOf(InferenceUnit.RgbData(dummyData) to InferenceContext(timestamp = 0.0))
     }
 
-    // MARK: - Initialization & Auth
+    // Initialization & Auth
 
     @Test
     fun `API key header is set on a direct call`() = runTest {
@@ -192,7 +192,7 @@ class ApiInferenceTest {
         assertNull(server.takeRequest().headers["X-Api-Key"])
     }
 
-    // MARK: - Resolve Model
+    // Resolve Model
 
     @Test
     fun `resolveModel sends the model as a query parameter`() = runTest {
@@ -209,9 +209,8 @@ class ApiInferenceTest {
     @Test
     fun `resolveModel tolerates whole-number floats for n_inputs and input_size`() = runTest {
         // The real API (observed against the dev environment) sometimes serializes these as
-        // JSON floats (e.g. 5.0) rather than integers. Foundation's JSONDecoder silently
-        // tolerates this for whole-number values when decoding into a Swift Int; kotlinx.
-        // serialization does not by default, so ModelConfig needs to match that leniency.
+        // JSON floats (e.g. 5.0) rather than integers. kotlinx.serialization rejects that by
+        // default when decoding into an Int, so ModelConfig needs to tolerate it explicitly.
         val floatEncodedResponse = """
             {
                 "resolved_model": "vitallens-2.0",
@@ -246,7 +245,7 @@ class ApiInferenceTest {
         assertTrue(strategy.bufferConfig().streamMax > 0u)
     }
 
-    // MARK: - Inference Execution
+    // Inference Execution
 
     @Test
     fun `stream request is built with gzip body and state header`() = runTest {
@@ -328,7 +327,7 @@ class ApiInferenceTest {
         assertEquals(2, apiState?.data?.size)
     }
 
-    // MARK: - Error Handling
+    // Error Handling
 
     @Test
     fun `401 maps to InvalidAPIKey`() = runTest {

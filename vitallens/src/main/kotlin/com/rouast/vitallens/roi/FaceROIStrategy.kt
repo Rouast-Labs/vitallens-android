@@ -21,8 +21,9 @@ import java.io.Closeable
  * detection pass in the background at most once per interval and always immediately returns the
  * most recently known ROI (which may be stale, or `null` before the first detection completes).
  *
- * Mirrors Swift's `FaceROIStrategy` actor: the actor's serialized state access becomes an
- * explicit [Mutex], and its fire-and-forget background `Task` becomes [scope].launch.
+ * The internal state ([lastDetectionTime]/[currentROI]/[isDetecting]) is touched from both the
+ * caller's coroutine and the background detection launched via [scope], so it's guarded by an
+ * explicit [Mutex].
  */
 class FaceROIStrategy(
     private val detector: FaceDetecting = FaceDetector(),

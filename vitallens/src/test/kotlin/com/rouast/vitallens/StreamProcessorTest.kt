@@ -34,8 +34,7 @@ import org.junit.Test
 import org.mockito.kotlin.mock
 
 /**
- * Real (not virtual) delays throughout, mirroring Swift's own StreamProcessorTests.swift, which
- * uses real Task.sleep durations — see FaceROIStrategyTest's note on why.
+ * Real (not virtual) delays throughout — see FaceROIStrategyTest's note on why.
  *
  * Every processor here is built with an explicit stub/custom [FrameTransformer], never the
  * class's own default one: the default transformer calls the real ImageProcessor.process() on a

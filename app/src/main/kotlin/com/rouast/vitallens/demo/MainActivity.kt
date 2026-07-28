@@ -55,9 +55,9 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * A minimal tabbed app mirroring `ContentView.swift`: Monitor, Scan, and File in that order,
- * each backed directly by the corresponding vitallens-ui screen, with a fallback prompt if no
- * API key or proxy URL is configured.
+ * A minimal tabbed app: Monitor, Scan, and File in that order, each backed directly by the
+ * corresponding vitallens-ui screen, with a fallback prompt if no API key or proxy URL is
+ * configured.
  */
 @Composable
 fun DemoApp() {

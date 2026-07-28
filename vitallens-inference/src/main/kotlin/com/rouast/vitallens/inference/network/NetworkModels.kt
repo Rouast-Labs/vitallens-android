@@ -28,10 +28,10 @@ data class ResolveModelResponse(
 /**
  * Decodes an [Int] that the API may serialize as a whole-number JSON float (e.g. `5.0`) rather
  * than an integer literal (observed against the real dev API for [ModelConfig.nInputs]/
- * [ModelConfig.inputSize]). Foundation's `JSONDecoder` silently tolerates this; kotlinx.
- * serialization does not by default — match that leniency here, but keep genuinely fractional
- * values (e.g. `5.5`) an error, since that would indicate a real data problem rather than just
- * an alternate whole-number encoding.
+ * [ModelConfig.inputSize]). kotlinx.serialization rejects that by default, so this tolerates a
+ * whole-number float as an integer, but keeps genuinely fractional values (e.g. `5.5`) an error,
+ * since that would indicate a real data problem rather than just an alternate whole-number
+ * encoding.
  */
 internal object LenientIntSerializer : KSerializer<Int> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LenientInt", PrimitiveKind.INT)
@@ -54,9 +54,10 @@ internal object LenientIntSerializer : KSerializer<Int> {
 /**
  * Configuration parameters for a specific VitalLens model.
  *
- * [modelName] is `@Transient`, mirroring the Swift original's CodingKeys
- * omission: it is never read from or written to JSON and always keeps its
- * default value after decoding.
+ * [modelName] is `@Transient`: the API never sends it as part of a `config` object — it's set
+ * separately by the caller after resolving which model to use (see [ApiInference]'s use of
+ * [ResolveModelResponse.resolvedModel]) — so it must be excluded from (de)serialization entirely
+ * rather than defaulting to `"vitallens"` on every decode.
  */
 @Serializable
 data class ModelConfig(

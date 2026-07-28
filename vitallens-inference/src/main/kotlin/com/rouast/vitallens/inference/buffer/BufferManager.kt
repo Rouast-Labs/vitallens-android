@@ -24,11 +24,13 @@ data class ManagedBufferInfo(val id: String, val roi: Rect)
  * lifecycles of multiple overlapping regions of interest, determining when frames should be
  * accumulated, dropped, or sent for inference.
  *
- * Mutex-guarded class standing in for Swift's `actor` — all mutating methods are `suspend fun`.
+ * All mutating methods are `suspend fun`s guarded by a single [Mutex], since frames can arrive
+ * concurrently with buffer-lifecycle changes (e.g. a new ROI being added mid-stream) and the
+ * buffer planner's state must stay consistent across both.
  *
- * [close] is a Kotlin-only addition with no Swift equivalent: [BufferPlanner] holds a native
- * Rust pointer (`Disposable`/`AutoCloseable`), and unlike Swift's ARC-driven `deinit`, the JVM
- * has no deterministic cleanup hook, so this class exposes one explicitly.
+ * [close] exists because [BufferPlanner] holds a native Rust pointer (`Disposable`/
+ * `AutoCloseable`) and the JVM has no deterministic destructor — callers must release it
+ * explicitly rather than relying on garbage collection.
  */
 class BufferManager {
     private val mutex = Mutex()

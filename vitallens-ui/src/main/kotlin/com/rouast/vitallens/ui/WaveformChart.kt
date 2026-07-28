@@ -32,9 +32,9 @@ internal data class CubicSegment(
 
 /**
  * Maps [samples] onto `width`x`height` pixel coordinates: x spans evenly left-to-right, y is
- * scaled to the data's own min/max — not zero — matching Swift Charts'
- * `.chartYScale(domain: .automatic(includesZero: false))`. Small variations stay visible instead
- * of being flattened by an unnecessary zero-based scale.
+ * scaled to the data's own min/max, not zero. Small variations in otherwise-large-valued signals
+ * (e.g. a PPG waveform centered far from zero) stay visible instead of being flattened by an
+ * unnecessary zero-based scale.
  */
 internal fun computeWaveformPoints(samples: List<Double>, width: Float, height: Float): List<Offset> {
     if (samples.isEmpty()) return emptyList()
@@ -53,10 +53,10 @@ internal fun computeWaveformPoints(samples: List<Double>, width: Float, height: 
 
 /**
  * Converts [points] into cubic Bezier segments approximating a uniform (tension 0) Catmull-Rom
- * spline through all of them — Compose's [Path] has no native spline support, unlike Swift
- * Charts' `.interpolationMethod(.catmullRom)`. Standard conversion: for a segment interpolating
- * P1 to P2, `control1 = P1 + (P2-P0)/6`, `control2 = P2 - (P3-P1)/6`, using the curve's own
- * endpoints as P0/P3 where no real neighbor exists.
+ * spline through all of them — Compose's [Path] has no native spline support, only line/cubic/quad
+ * segments. Standard conversion: for a segment interpolating P1 to P2, `control1 = P1 + (P2-P0)/6`,
+ * `control2 = P2 - (P3-P1)/6`, using the curve's own endpoints as P0/P3 where no real neighbor
+ * exists.
  */
 internal fun catmullRomSegments(points: List<Offset>): List<CubicSegment> {
     if (points.size < 2) return emptyList()
@@ -78,8 +78,7 @@ internal fun catmullRomSegments(points: List<Offset>): List<CubicSegment> {
 
 /**
  * A lightweight waveform chart for time-series physiological data: a single smooth interpolated
- * line, no axes — same visual contract as Swift's Charts-based `WaveformView`, hand-rolled here
- * via [Canvas]/[Path] since Compose has no built-in charting library.
+ * line, no axes, hand-rolled via [Canvas]/[Path] since Compose has no built-in charting library.
  */
 @Composable
 fun WaveformChart(
@@ -111,10 +110,7 @@ fun WaveformChart(
     }
 }
 
-/**
- * A titled card wrapping [WaveformChart] with a standard background and loading state, matching
- * Swift's `WaveformContainer`.
- */
+/** A titled card wrapping [WaveformChart] with a standard background and loading state. */
 @Composable
 fun WaveformContainer(vitalId: String, history: List<Double>, isReady: Boolean, modifier: Modifier = Modifier) {
     val meta = VitalInfoCache.getInfo(vitalId)

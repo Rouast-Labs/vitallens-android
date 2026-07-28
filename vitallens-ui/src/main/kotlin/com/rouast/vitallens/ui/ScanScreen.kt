@@ -60,17 +60,16 @@ private const val RECOVERY_TIMEOUT_SECONDS = 10.0
 private const val VITAL_CONF_THRESHOLD = 0.8
 private const val HRV_CONF_THRESHOLD = 0.7
 
-/** The operational states of the scanning process. Mirrors Swift's `ScanState`. */
+/** The operational states of the scanning process. */
 enum class ScanState { IDLE, SEARCHING, WARMING_UP, TRACKING, RECOVERING, ISSUE, COMPLETED }
 
 /** The outcome of evaluating a scan-state transition: the resolved state, message, and strike count. */
 internal data class ScanTransitionResult(val state: ScanState, val message: String, val strikeCount: Int)
 
 /**
- * Pure per-frame state-transition rule, extracted from `VitalLensScanView.swift`'s `updateUI`
- * switch statement so it's unit-testable without a live camera/coroutine pipeline. Only called
- * for the four "live" states (searching/warmingUp/tracking/recovering) — idle/completed/issue are
- * guarded by the caller, matching the Swift `default: break`.
+ * Pure per-frame state-transition rule, kept separate from [ScanController] so it's unit-testable
+ * without a live camera/coroutine pipeline. Only called for the four "live" states (searching/
+ * warmingUp/tracking/recovering) — idle/completed/issue are guarded by the caller.
  */
 internal fun resolveScanTransition(
     currentState: ScanState,
@@ -112,10 +111,7 @@ internal fun resolveScanTransition(
     else -> ScanTransitionResult(currentState, currentMessage, strikeCount)
 }
 
-/**
- * Handles a transient issue, escalating to a full [ScanState.ISSUE] once retries are exhausted.
- * Mirrors `VitalLensScanView.swift`'s `handleIssue(message:)`.
- */
+/** Handles a transient issue, escalating to a full [ScanState.ISSUE] once retries are exhausted. */
 internal fun resolveIssueEscalation(strikeCount: Int, message: String): ScanTransitionResult {
     val newStrikeCount = strikeCount + 1
     return if (newStrikeCount >= 3) {
@@ -126,10 +122,10 @@ internal fun resolveIssueEscalation(strikeCount: Int, message: String): ScanTran
 }
 
 /**
- * Owns the scan's mutable state and orchestration — the Compose analogue of
- * `VitalLensScanView`'s `@State` properties and private methods. Created via `remember` so it
- * survives recomposition but not configuration changes, matching this codebase's established
- * per-screen state ownership (see project memory on vitallens-ui architecture decisions).
+ * Owns the scan's mutable state and orchestration. Created via `remember` so it survives
+ * recomposition, but not a configuration change — a known gap: a screen rotation mid-scan
+ * currently loses progress and restarts from idle, since the underlying [VitalLens] client and
+ * accumulated scan state aren't retained across activity recreation.
  */
 private class ScanController(
     private val apiKey: String?,
@@ -214,8 +210,8 @@ private class ScanController(
     /**
      * A result with `state == SEARCHING` reached from anything other than `SEARCHING` only ever
      * comes from [resolveIssueEscalation] (the per-frame reducer never transitions directly to
-     * searching otherwise) — that's the manual-reset "retry" branch Swift's `handleIssue` performs
-     * inline rather than through its generic `transition(to:message:)`.
+     * searching otherwise) — that's the "retry" branch, which needs the fuller manual reset below
+     * rather than the plain state/message swap [transition] does for every other case.
      */
     private fun applyScanTransition(result: ScanTransitionResult) {
         strikeCount = result.strikeCount
@@ -382,8 +378,7 @@ private class ScanController(
 
 /**
  * A guided, fixed-duration scanning experience: captures video, evaluates face placement and
- * lighting, and returns a single aggregated result upon completion. Mirrors
- * `VitalLensScanView.swift`.
+ * lighting, and returns a single aggregated result upon completion.
  */
 @Composable
 fun ScanScreen(
@@ -503,7 +498,7 @@ private fun ScanProgressRing(progress: Double, modifier: Modifier = Modifier, ri
     }
 }
 
-/** A blurred overlay with an oval cutout guiding face placement. Mirrors `CutoutOverlay`. */
+/** A blurred overlay with an oval cutout guiding face placement. */
 @Composable
 private fun CutoutOverlay(modifier: Modifier = Modifier, cutoutWidth: Dp = 320.dp, cutoutHeight: Dp = 450.dp) {
     Canvas(
@@ -521,7 +516,7 @@ private fun CutoutOverlay(modifier: Modifier = Modifier, cutoutWidth: Dp = 320.d
     }
 }
 
-/** Displays the current scan state as a pulsing colored dot with a label. Mirrors `ScanStatusBadge`. */
+/** Displays the current scan state as a pulsing colored dot with a label. */
 @Composable
 fun ScanStatusBadge(state: ScanState, modifier: Modifier = Modifier) {
     val isPulsing = state == ScanState.SEARCHING || state == ScanState.WARMING_UP || state == ScanState.RECOVERING

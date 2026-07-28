@@ -2,7 +2,7 @@ package com.rouast.vitallens.ui
 
 import androidx.compose.ui.graphics.Color
 
-/** Colors shared across `vitallens-ui`'s screens, matching Swift's literal color values. */
+/** Colors shared across `vitallens-ui`'s screens. */
 internal object VitalLensColors {
     /** The near-black screen background used throughout Scan/Monitor/File. */
     val Background = Color(red = 0.06f, green = 0.07f, blue = 0.09f)

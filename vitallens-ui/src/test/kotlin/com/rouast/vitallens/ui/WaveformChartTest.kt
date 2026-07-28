@@ -31,9 +31,8 @@ class WaveformChartTest {
 
     @Test
     fun `computeWaveformPoints scales y to the data's own min-max, not zero`() {
-        // A tiny wobble far from zero should still span the full chart height, matching Swift
-        // Charts' chartYScale(domain: .automatic(includesZero: false)) — small variations stay
-        // visible instead of being flattened by an unnecessary zero-based scale.
+        // A tiny wobble far from zero should still span the full chart height — small variations
+        // stay visible instead of being flattened by an unnecessary zero-based scale.
         val points = computeWaveformPoints(listOf(1000.0, 1000.5, 1000.0), width = 100f, height = 100f)
         assertEquals(100f, points[0].y, 0.001f) // min value -> bottom
         assertEquals(0f, points[1].y, 0.001f) // max value -> top
@@ -67,8 +66,7 @@ class WaveformChartTest {
     fun `catmullRomSegments clamps neighbor lookups at the ends of the curve`() {
         // Standard Catmull-Rom-to-cubic-Bezier conversion (uniform, tension 0): for a segment
         // interpolating P1 to P2, control1 = P1 + (P2-P0)/6, control2 = P2 - (P3-P1)/6, using the
-        // curve's own endpoints as P0/P3 where no real neighbor exists (matches Swift Charts'
-        // catmullRom behavior at curve boundaries).
+        // curve's own endpoints as P0/P3 where no real neighbor exists.
         val p0 = Offset(0f, 0f)
         val p1 = Offset(10f, 0f)
         val p2 = Offset(20f, 10f)

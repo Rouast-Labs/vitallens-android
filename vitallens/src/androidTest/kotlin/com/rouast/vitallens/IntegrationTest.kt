@@ -29,19 +29,17 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * Real network integration tests against the live VitalLens API, mirroring
- * IntegrationTests.swift. Gated behind VITALLENS_API_KEY/VITALLENS_BASE_URL — both required, not
- * just the key, matching Swift (these tests always run against whatever base URL is configured,
- * never implicitly production). See vitallens/build.gradle.kts's integrationTestCredential() for
- * how these are threaded from local.properties/the shell environment into
- * testInstrumentationRunnerArguments: unlike Swift's ProcessInfo.processInfo.environment, which
- * transparently shares the whole test process's real OS environment, an Android instrumented
- * test runs in a separate process on a device/emulator that does not inherit the host shell's
- * environment, so InstrumentationRegistry.getArguments() (not System.getenv()) is what the test
- * actually sees.
+ * Real network integration tests against the live VitalLens API. Gated behind
+ * VITALLENS_API_KEY/VITALLENS_BASE_URL — both required, not just the key, so these tests always
+ * run against an explicitly configured base URL and never implicitly fall back to production.
+ * See vitallens/build.gradle.kts's integrationTestCredential() for how these are threaded from
+ * local.properties/the shell environment into testInstrumentationRunnerArguments: an Android
+ * instrumented test runs in a separate process on a device/emulator that does not inherit the
+ * host shell's environment, so InstrumentationRegistry.getArguments() (not System.getenv()) is
+ * what the test actually sees.
  *
  * Needs a real Android runtime (Context, MediaMetadataRetriever via FileSource), so this lives
- * under androidTest, not test — mirrors FileProcessorInstrumentedTest's placement rationale.
+ * under androidTest, not test — same placement rationale as FileProcessorInstrumentedTest.
  */
 @RunWith(AndroidJUnit4::class)
 class IntegrationTest {

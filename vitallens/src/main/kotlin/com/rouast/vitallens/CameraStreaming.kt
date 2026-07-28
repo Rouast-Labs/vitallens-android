@@ -17,8 +17,9 @@ interface CameraStreaming {
     /**
      * Attaches a live preview of the video stream to the specified view.
      *
-     * Must be called from the main thread — mirrors Swift's `@MainActor` isolation on this
-     * method, which Kotlin has no compile-time equivalent for.
+     * Must be called from the main thread: implementations attach the preview surface directly to
+     * a live Android [android.view.View] hierarchy, which is only safe to touch from the UI
+     * thread. Kotlin has no compile-time way to enforce this — callers must get it right.
      */
     fun showPreview(view: PreviewView)
 }

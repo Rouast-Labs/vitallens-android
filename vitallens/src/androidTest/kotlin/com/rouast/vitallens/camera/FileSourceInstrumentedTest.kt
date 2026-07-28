@@ -58,8 +58,10 @@ class FileSourceInstrumentedTest {
         }
     }
 
-    /** [kotlinx.coroutines.flow.Flow.take] cancels the upstream collection early — this is the
-     * equivalent of Swift's testCancellationStopsReading (early break after N frames). */
+    /**
+     * [kotlinx.coroutines.flow.Flow.take] cancels the upstream collection early, so only the
+     * first few frames should actually be decoded rather than the whole video.
+     */
     @Test
     fun collectingOnlyAFewFramesStopsReadingEarly() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

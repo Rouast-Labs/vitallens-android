@@ -32,8 +32,8 @@ object ROICalculator {
         val result = calculateRoi(
             face = faceRect.toRustRect(),
             method = rustMethod,
-            // ML Kit, not Apple Vision, is this SDK's face detector — DEFAULT is the
-            // correct choice here, not a literal copy of Swift's hardcoded .appleVision.
+            // ML Kit is this SDK's face detector, so the generic DEFAULT detector kind is the
+            // correct value here rather than a vendor-specific one.
             detector = FaceDetector.DEFAULT,
             containerWidth = 1.0f,
             containerHeight = 1.0f,

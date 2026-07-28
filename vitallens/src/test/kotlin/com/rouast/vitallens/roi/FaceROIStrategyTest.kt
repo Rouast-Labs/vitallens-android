@@ -14,8 +14,7 @@ import org.junit.Test
 import org.mockito.kotlin.mock
 
 /**
- * Real (not virtual/runTest) delays throughout, matching Swift's own ROIStrategyTests.swift,
- * which uses real Task.sleep nanosecond durations: FaceROIStrategy's throttling check compares
+ * Real (not virtual/runTest) delays throughout: FaceROIStrategy's throttling check compares
  * against System.currentTimeMillis() (real wall-clock time), which kotlinx-coroutines-test's
  * virtual clock has no effect on — runTest's virtual delay() calls would "complete" without
  * actually advancing real time, breaking the throttling assertions entirely.

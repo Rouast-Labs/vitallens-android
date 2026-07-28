@@ -35,14 +35,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
 
-/** The state of the file processing workflow. Mirrors Swift's `FileState`. */
+/** The state of the file processing workflow. */
 enum class FileState { IDLE, PROCESSING, COMPLETED, ERROR }
 
 /**
- * Parses a raw [VitalLensResult] into UI-ready vitals and stats. Mirrors
- * `VitalLensFileView.swift`'s `parseVitals(from:)`: unlike `ScanScreen.kt`'s `completeScan`, no
- * confidence threshold is applied — a vital is shown whenever it was computed at all, with
- * primary vitals that were never computed dropped entirely (rather than shown as "--").
+ * Parses a raw [VitalLensResult] into UI-ready vitals and stats. Unlike `ScanScreen.kt`'s
+ * `completeScan`, no confidence threshold is applied here — a vital is shown whenever it was
+ * computed at all, with primary vitals that were never computed dropped entirely (rather than
+ * shown as "--").
  */
 internal fun resolveFileVitals(result: VitalLensResult, fallbackFps: Double): Triple<List<ResolvedVital>, List<ResolvedVital>, ScanStats> {
     val hrMeta = VitalInfoCache.getInfo("heart_rate")
@@ -155,11 +155,11 @@ private class FileController(
 
 /**
  * Lets the user select a video file, processes it via the VitalLens API in batch mode, and
- * displays the resulting vital signs and waveforms. Mirrors `VitalLensFileView.swift`.
+ * displays the resulting vital signs and waveforms.
  *
- * Android's system document/media picker already covers both "Photo Library" and "Files" in one
- * flow, so unlike iOS's `confirmationDialog` source-selector this launches a single
- * `ActivityResultContracts.GetContent()` picker directly.
+ * Android's system document/media picker already covers photo library and file browser sources in
+ * one flow, so this launches a single `ActivityResultContracts.GetContent()` picker directly
+ * rather than presenting a separate source-selection step first.
  */
 @Composable
 fun FileScreen(

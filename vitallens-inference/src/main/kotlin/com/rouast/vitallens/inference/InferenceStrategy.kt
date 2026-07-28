@@ -7,9 +7,9 @@ import com.rouast.vitallens.inference.model.VitalLensResult
 import com.rouast.vitallens.inference.network.ModelConfig
 
 /**
- * EXIF-style physical orientation of a source image, mirroring Swift's `CGImagePropertyOrientation`.
- * Framework-agnostic like [Rect]: consumed here by [InferenceContext], and later by the camera/image
- * processing layer (`vitallens` module) once ported, rather than being redefined there.
+ * EXIF-style physical orientation of a source image. Framework-agnostic like [Rect]: consumed
+ * here by [InferenceContext], and also by the camera/image processing layer (`vitallens` module)
+ * rather than being redefined there.
  */
 enum class ImageOrientation {
     UP,

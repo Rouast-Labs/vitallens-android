@@ -10,13 +10,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 /**
  * A Compose wrapper providing a [PreviewView] for the camera preview.
  *
- * Mirrors Swift's `CameraPreview` (`UIViewRepresentable`), but simpler: [AndroidView]'s `factory`
- * lambda already runs exactly once per composable instance, so there's no need for Swift's
- * `Coordinator`/`hasCalledOnViewAvailable` bookkeeping to guarantee a single invocation across
- * repeated `updateUIView` calls. Also more directly typed than Swift's version — [onViewAvailable]
- * receives a real [PreviewView] rather than a raw `UIView` a caller must know to attach a capture
- * layer to; [com.rouast.vitallens.camera.CameraSource]/[com.rouast.vitallens.VitalLens] already
- * bind directly to a [PreviewView] via `showPreview`/`startStream(preview:)`.
+ * [AndroidView]'s `factory` lambda runs exactly once per composable instance, so
+ * [onViewAvailable] fires exactly once with no bookkeeping needed to guard against being called
+ * again later. It receives a real [PreviewView] directly — [com.rouast.vitallens.camera.CameraSource]/
+ * [com.rouast.vitallens.VitalLens] bind straight to it via `showPreview`/`startStream(preview:)`.
  *
  * @param onViewAvailable Called once, as soon as the underlying [PreviewView] is created.
  */

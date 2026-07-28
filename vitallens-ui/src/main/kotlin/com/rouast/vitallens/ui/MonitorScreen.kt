@@ -68,14 +68,13 @@ private const val VITAL_CONF_THRESHOLD = 0.8
 private const val HRV_CONF_THRESHOLD = 0.7
 private const val FACE_CONF_THRESHOLD = 0.5
 
-/** The operational state of the live monitor. Mirrors Swift's `MonitorState`. */
+/** The operational state of the live monitor. */
 enum class MonitorState { IDLE, SEARCHING, WARMING_UP, TRACKING, ISSUE }
 
 /**
- * The post-face-confidence-check portion of `VitalLensMonitorView.swift`'s `updateUI`: given
- * which vitals are currently confident, decides whether to flag low confidence, keep warming up
- * (waiting for enough buffered samples), or report tracking. The face-confidence-too-low branch
- * is handled separately by the caller since it short-circuits before any of these vitals are read.
+ * Given which vitals are currently confident, decides whether to flag low confidence, keep
+ * warming up (waiting for enough buffered samples), or report tracking. The face-confidence-too-
+ * low case is handled separately by the caller, before any of these vitals are even read.
  */
 internal fun resolveMonitorFeedback(
     hasConfidentHr: Boolean,
@@ -90,11 +89,11 @@ internal fun resolveMonitorFeedback(
     else -> MonitorState.TRACKING to "Tracking vitals"
 }
 
-/** The width of a [GroupedMetricsTile], or `null` to let it fill remaining space. Mirrors `dynamicTileWidth`. */
+/** The width of a [GroupedMetricsTile], or `null` to let it fill remaining space. */
 internal fun dynamicTileWidth(showWaveforms: Boolean, hasSecondaryVitals: Boolean): Int? =
     if (!showWaveforms) null else if (hasSecondaryVitals) 170 else 110
 
-/** The display format for a vital id. Mirrors `GroupedMetricsTile.init`'s local `format(for:)`. */
+/** The display format for a vital id. */
 internal fun monitorVitalFormat(id: String?): String =
     if (id == "ie_ratio" || id == "hrv_lfhf") "%.2f" else "%.0f"
 
@@ -252,9 +251,9 @@ private class MonitorController(
                 val stream = newClient.startStream(preview = view)
                 stream.collect { result -> updateUI(result) }
             } catch (e: Exception) {
-                // Matches VitalLensMonitorView.swift's own silent `catch { stopProcessing() }` — no
-                // user-visible error state for a stream startup failure, same as iOS. Logged so the
-                // failure is still diagnosable (e.g. InvalidAPIKey) without an Xcode-console analog.
+                // No user-visible error state for a stream startup failure — it just reverts
+                // silently to idle. Still logged so the failure (e.g. an invalid API key) is
+                // diagnosable from logcat rather than leaving no trace at all.
                 Log.e(LOG_TAG, "startSession failed", e)
                 stopProcessing()
             }
@@ -262,11 +261,10 @@ private class MonitorController(
     }
 
     /**
-     * Face-loss handling deliberately deviates from `VitalLensMonitorView.swift` here: iOS sets a
-     * hard [MonitorState.ISSUE], vitallens.js instead falls back to a soft `searching` retry
-     * ("Changed to gracefully fallback to searching instead of fatal issue" per its own comment).
-     * User-approved to follow the JS behavior — see project memory on vitallens-ui architecture
-     * decisions.
+     * On losing the face, falls back to a soft [MonitorState.SEARCHING] retry rather than a hard
+     * error state: losing face tracking for a moment during live monitoring is routine, not
+     * exceptional, and treating every momentary loss as a fatal error would make the monitor feel
+     * needlessly fragile.
      */
     private fun onFaceStateChanged(isPresent: Boolean) {
         if (!isProcessing) return
@@ -389,9 +387,7 @@ private class MonitorController(
 
 /**
  * A real-time, continuous monitoring interface for vital signs: a live camera feed with
- * dynamically updating physiological estimates and waveforms. Mirrors
- * `VitalLensMonitorView.swift`. The debug crop/ROI overlay is dropped — `VitalLens.kt` has no
- * `debugMode`/`debugLatestCrop` (see its own docstring), so there's nothing to display.
+ * dynamically updating physiological estimates and waveforms.
  */
 @Composable
 fun MonitorScreen(
@@ -477,7 +473,7 @@ private fun MonitorTopBar(state: MonitorState, onStop: () -> Unit, modifier: Mod
     }
 }
 
-/** A dashed oval guide shown while searching for a face. Mirrors the `middleGapLayer` outline. */
+/** A dashed oval guide shown while searching for a face. */
 @Composable
 private fun SearchOvalGuide(modifier: Modifier = Modifier, width: Dp = 220.dp, height: Dp = 300.dp) {
     Canvas(modifier = modifier.size(width, height).padding(8.dp)) {
@@ -631,7 +627,7 @@ private fun SecondaryMetric(id: String, value: Double?, isReady: Boolean) {
     }
 }
 
-/** Displays the current monitor state as a pulsing colored dot with a label. Mirrors `StatusBadge`. */
+/** Displays the current monitor state as a pulsing colored dot with a label. */
 @Composable
 fun MonitorStatusBadge(state: MonitorState, modifier: Modifier = Modifier) {
     val isPulsing = state == MonitorState.SEARCHING || state == MonitorState.WARMING_UP
