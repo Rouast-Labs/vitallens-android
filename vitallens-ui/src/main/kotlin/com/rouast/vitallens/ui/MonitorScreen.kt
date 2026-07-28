@@ -1,6 +1,7 @@
 package com.rouast.vitallens.ui
 
 import android.os.SystemClock
+import android.util.Log
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -61,6 +62,7 @@ import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
 import java.util.Locale
 
+private const val LOG_TAG = "MonitorScreen"
 private const val MONITOR_ROUAST_API_URL = "https://www.rouast.com/api/"
 private const val VITAL_CONF_THRESHOLD = 0.8
 private const val HRV_CONF_THRESHOLD = 0.7
@@ -248,6 +250,10 @@ private class MonitorController(
                 val stream = newClient.startStream(preview = view)
                 stream.collect { result -> updateUI(result) }
             } catch (e: Exception) {
+                // Matches VitalLensMonitorView.swift's own silent `catch { stopProcessing() }` — no
+                // user-visible error state for a stream startup failure, same as iOS. Logged so the
+                // failure is still diagnosable (e.g. InvalidAPIKey) without an Xcode-console analog.
+                Log.e(LOG_TAG, "startSession failed", e)
                 stopProcessing()
             }
         }
