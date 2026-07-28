@@ -21,3 +21,4 @@ rootProject.name = "vitallens-android"
 include(":vitallens-inference")
 include(":vitallens")
 include(":vitallens-ui")
+include(":app")
