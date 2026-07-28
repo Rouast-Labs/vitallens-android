@@ -43,6 +43,12 @@ dependencies {
     api(projects.vitallens)
     api(projects.vitallensInference)
 
+    // Neither vitallens nor vitallens-inference expose com.rouast.vitallens.core (the generated
+    // bindings package) via api(), so it isn't visible transitively here — VitalInfoCache calls
+    // getVitalInfo directly. api(), not implementation(): VitalInfoCache.getInfo() returns
+    // VitalInfo in this module's own public API, so consumers need it on their classpath too.
+    api(libs.vitallens.core)
+
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
