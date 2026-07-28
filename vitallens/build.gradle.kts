@@ -71,7 +71,10 @@ dependencies {
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
+    // api, not implementation: PreviewView is part of this module's own public API
+    // (CameraStreaming.showPreview, VitalLens.startStream) — consumers (vitallens-ui, the demo
+    // app) need it on their compile classpath too. Same category of issue as Rect/Protocols.kt.
+    api(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
 
     // Generated UniFFI Kotlin bindings + native libs for the Rust core.

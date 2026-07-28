@@ -34,8 +34,13 @@ kotlin {
 }
 
 dependencies {
-    implementation(projects.vitallens)
-    implementation(projects.vitallensInference)
+    // api, not implementation: composables here expose types from both modules in their own
+    // public signatures (e.g. ScanScreen(onComplete: (VitalLensResult) -> Unit)), so downstream
+    // consumers (the demo app) need them on their compile classpath too — implementation()
+    // doesn't propagate. Same category of issue already hit for Rect/Protocols.kt and
+    // okhttp3.HttpUrl/ApiInference.
+    api(projects.vitallens)
+    api(projects.vitallensInference)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
