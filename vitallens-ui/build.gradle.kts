@@ -48,11 +48,15 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.androidx.activity.compose)
 
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(libs.junit)
+    // Lets tests call real Rust-backed functions (e.g. getVitalInfo) instead of throwing
+    // UnsatisfiedLinkError under the plain Android AAR pulled in via api(projects.vitallens).
+    testImplementation(libs.vitallens.core.jvm)
 
     // Compose UI needs a real composition context (AndroidView, layout, etc.) that plain JVM
     // tests can't provide — instrumented tests (androidTest, not test) for this module's
