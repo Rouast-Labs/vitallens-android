@@ -32,7 +32,12 @@ kotlin {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.okhttp)
+    // api, not implementation: ApiInference's constructor exposes okhttp3.HttpUrl (proxyUrl)
+    // as part of its own public API, and VitalLens.kt (in the vitallens module, a consumer of
+    // this module) needs that same type on its compile classpath for its own proxyUrl parameter
+    // — implementation() doesn't propagate transitively. Same category of issue CLAUDE.md already
+    // flags for Rect/Protocols.kt.
+    api(libs.okhttp)
 
     // Generated UniFFI Kotlin bindings + native libs for the Rust core.
     implementation(libs.vitallens.core)

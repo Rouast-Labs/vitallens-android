@@ -35,7 +35,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.kotlin.mock
 
 /**
  * VitalLens's constructor registers a ProcessLifecycleOwner observer, which needs a real
@@ -122,7 +121,16 @@ class VitalLensInstrumentedTest {
     }
 
     private lateinit var context: Context
-    private val dummyBitmap = mock<Bitmap>()
+    // A real (not mocked) Bitmap: Mockito's default (Byte Buddy inline) mock maker doesn't work
+    // on a real Android/Dalvik runtime — that's a plain-JVM-unit-test-only trick. A real Android
+    // runtime makes a real Bitmap cheap to construct instead, sidestepping the need to mock it.
+    //
+    // 100x100, matching Swift's own createDummyBuffer(): these tests (unlike StreamProcessorTest,
+    // which always supplies an explicit stub transformer) exercise StreamProcessor's *default*
+    // transformer, which crops the configured ROI out of this bitmap for real via ImageProcessor
+    // — a too-small bitmap makes that crop fail, which processFrame's catch-all silently swallows
+    // (matching Swift), so frames would never actually make it into the buffer.
+    private val dummyBitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
 
     @Before
     fun setUp() {
@@ -131,8 +139,13 @@ class VitalLensInstrumentedTest {
 
     private fun makeFrame(time: Double) = InputFrame(dummyBitmap, ImageOrientation.UP, isMirrored = true, timestamp = time)
 
+    // Named without backticks/spaces: a lambda inside a backtick-named test method (e.g. the
+    // launch{} below) inherits the enclosing method's name into its generated class name, and
+    // DEX (unlike plain JVM class files) rejects spaces there — matches this file's Android
+    // instrumented-test siblings (CameraSource/FileSource/FaceDetector/FileProcessor), which
+    // already use camelCase for the same reason.
     @Test
-    fun `starting the stream initializes and starts the processor`() = runBlocking {
+    fun startingStreamInitializesAndStartsProcessor() = runBlocking {
         val strategy = FakeInferenceStrategy()
         val roiStrategy = FakeROIStrategy()
         val fakeCamera = FakeCameraStreaming()
@@ -150,7 +163,13 @@ class VitalLensInstrumentedTest {
             }
         }
 
-        val received = withTimeout(5_000) { stream.first() }
+        // Generous timeout, matching CameraSourceInstrumentedTest's own real-hardware-warmup
+        // budget: this is the first test in the class to touch the native Rust core (Session/
+        // BufferPlanner construction inside StreamProcessor.start()), and first-touch JNA/native
+        // lib loading through a real emulator's Dalvik/ART JNI bridge is markedly slower than the
+        // equivalent warmup cost already seen on a native JVM (FaceROIStrategyTest/
+        // StreamProcessorTest's own native-warmup notes).
+        val received = withTimeout(15_000) { stream.first() }
         assertNotNull("Client should yield results from the processor", received)
 
         delay(100)
@@ -163,38 +182,61 @@ class VitalLensInstrumentedTest {
     }
 
     @Test
-    fun `backgrounding the app pauses the camera and foregrounding resumes it`() = runBlocking {
+    fun backgroundingAppPausesCameraAndForegroundingResumesIt() = runBlocking {
         val strategy = FakeInferenceStrategy()
         val roiStrategy = FakeROIStrategy()
         val fakeCamera = FakeCameraStreaming()
         val processor = StreamProcessor(strategy = strategy, camera = fakeCamera, roiStrategy = roiStrategy)
+
+        val firstScenario = ActivityScenario.launch(EmptyTestActivity::class.java)
+        // Constructing VitalLens while the activity is already RESUMED means LifecycleRegistry
+        // synchronously delivers a "catch-up" onStart() to our observer during addObserver()
+        // itself (it always brings a newly added observer up to the process's current state) —
+        // firing handleAppForeground() once before any real backgrounding happens. This is
+        // correct, expected ProcessLifecycleOwner behavior, not a StreamProcessor/VitalLens bug,
+        // so assert relative increases from a snapshot taken after startStream() rather than
+        // assuming a clean absolute call count.
         val client = VitalLens(context, processor)
-        delay(50)
+        delay(150)
 
-        ActivityScenario.launch(EmptyTestActivity::class.java).use { scenario ->
-            client.startStream()
-            delay(100)
-            assertEquals(1, fakeCamera.startCallCount)
+        client.startStream()
+        delay(100)
+        val startCountAfterStarting = fakeCamera.startCallCount
+        assertTrue("Camera should have started", startCountAfterStarting > 0)
+        val stopCountBeforeBackgrounding = fakeCamera.stopCallCount
 
-            scenario.moveToState(Lifecycle.State.CREATED)
+        // moveToState(CREATED) from RESUMED doesn't reliably propagate through
+        // ActivityLifecycleCallbacks.onActivityStopped() on this androidx.test version (verified
+        // empirically: onPause/onStop fire for a full DESTROYED teardown but never for CREATED)
+        // — destroy and then launch a fresh activity for a reliable ON_STOP -> ON_START cycle.
+        // ProcessLifecycleOwner also intentionally debounces ON_STOP by ~700ms internally (to
+        // absorb quick activity recreation, e.g. rotation) before actually dispatching it — wait
+        // comfortably past that.
+        firstScenario.moveToState(Lifecycle.State.DESTROYED)
+        delay(1500)
+        assertTrue(
+            "Camera should stop on background",
+            fakeCamera.stopCallCount > stopCountBeforeBackgrounding,
+        )
+
+        ActivityScenario.launch(EmptyTestActivity::class.java).use {
             delay(300)
-            assertEquals("Camera should stop on background", 1, fakeCamera.stopCallCount)
-
-            scenario.moveToState(Lifecycle.State.RESUMED)
-            delay(300)
-            assertEquals("Camera should restart on foreground", 2, fakeCamera.startCallCount)
+            assertTrue(
+                "Camera should restart on foreground",
+                fakeCamera.startCallCount > startCountAfterStarting,
+            )
         }
     }
 
     @Test
-    fun `public properties are set from the constructor`() {
+    fun publicPropertiesAreSetFromTheConstructor() {
         val client = VitalLens(context, apiKey = "key", method = "vitallens-2.0")
         assertEquals("key", client.apiKey)
         assertEquals("vitallens-2.0", client.method)
     }
 
     @Test
-    fun `face state callback set before starting propagates to the processor`() = runBlocking {
+    fun faceStateCallbackSetBeforeStartingPropagatesToProcessor() = runBlocking {
         val strategy = FakeInferenceStrategy()
         val roiStrategy = FakeROIStrategy()
         val fakeCamera = FakeCameraStreaming()
