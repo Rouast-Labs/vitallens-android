@@ -65,4 +65,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    // android.graphics.Bitmap needs a real reference for tests that don't care about actual
+    // pixel content — a real android.graphics.Bitmap is otherwise expensive/awkward to construct
+    // just to satisfy a type, even under a real instrumented-test Android runtime.
+    androidTestImplementation(libs.mockito.kotlin)
 }
