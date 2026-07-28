@@ -207,6 +207,33 @@ class ApiInferenceTest {
     }
 
     @Test
+    fun `resolveModel tolerates whole-number floats for n_inputs and input_size`() = runTest {
+        // The real API (observed against the dev environment) sometimes serializes these as
+        // JSON floats (e.g. 5.0) rather than integers. Foundation's JSONDecoder silently
+        // tolerates this for whole-number values when decoding into a Swift Int; kotlinx.
+        // serialization does not by default, so ModelConfig needs to match that leniency.
+        val floatEncodedResponse = """
+            {
+                "resolved_model": "vitallens-2.0",
+                "config": {
+                    "n_inputs": 5.0,
+                    "input_size": 40.0,
+                    "fps_target": 30.0,
+                    "roi_method": "face",
+                    "supported_vitals": ["heart_rate"]
+                }
+            }
+        """.trimIndent()
+        server.enqueue(MockResponse.Builder().code(200).body(floatEncodedResponse).build())
+        val api = ApiInference(apiKey = "key", proxyUrl = null, client = redirectingClient())
+
+        val response = api.resolveModel(requestedModel = "vitallens-2.0")
+
+        assertEquals(5, response.config.nInputs)
+        assertEquals(40, response.config.inputSize)
+    }
+
+    @Test
     fun `resolveConfig and bufferConfig conform to InferenceStrategy`() = runTest {
         server.enqueue(MockResponse.Builder().code(200).body(resolveResponse).build())
         val strategy: com.rouast.vitallens.inference.InferenceStrategy =
