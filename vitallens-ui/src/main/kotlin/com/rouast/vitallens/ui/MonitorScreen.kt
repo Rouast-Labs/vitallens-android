@@ -116,6 +116,7 @@ private class MonitorController(
     private val bufferOffsetSeconds: Double,
     private val windowSizeSeconds: Double,
     private val minDisplayDurationSeconds: Double,
+    private val baseUrl: HttpUrl?,
     private val scope: CoroutineScope,
 ) {
     var currentMode by mutableStateOf(initialMode)
@@ -237,6 +238,7 @@ private class MonitorController(
             proxyUrl = proxyUrl,
             overrideFps = currentMode.fps,
             waveformMode = WaveformMode.Incremental,
+            strategy = resolveCustomStrategy(apiKey, proxyUrl, method, currentMode.fps, baseUrl),
         )
         newClient.onFaceStateChanged = { isPresent -> onFaceStateChanged(isPresent) }
         client = newClient
@@ -402,13 +404,14 @@ fun MonitorScreen(
     bufferOffsetSeconds: Double = 0.15,
     windowSizeSeconds: Double = 8.0,
     minDisplayDurationSeconds: Double = 6.0,
+    baseUrl: HttpUrl? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val controller = remember {
         MonitorController(
             context, apiKey, proxyUrl, method, showWaveforms, initialMode,
-            bufferOffsetSeconds, windowSizeSeconds, minDisplayDurationSeconds, scope,
+            bufferOffsetSeconds, windowSizeSeconds, minDisplayDurationSeconds, baseUrl, scope,
         )
     }
 

@@ -136,6 +136,7 @@ private class ScanController(
     private val proxyUrl: HttpUrl?,
     private val method: String,
     initialMode: VitalLensMode,
+    private val baseUrl: HttpUrl?,
     private val scope: CoroutineScope,
     private val onComplete: (VitalLensResult) -> Unit,
 ) {
@@ -251,6 +252,7 @@ private class ScanController(
             method = method,
             proxyUrl = proxyUrl,
             overrideFps = currentMode.fps,
+            strategy = resolveCustomStrategy(apiKey, proxyUrl, method, currentMode.fps, baseUrl),
         )
         newClient.onFaceStateChanged = { isPresent -> onFaceStateChanged(isPresent) }
         client = newClient
@@ -391,10 +393,11 @@ fun ScanScreen(
     proxyUrl: HttpUrl? = null,
     method: String = "vitallens",
     mode: VitalLensMode = VitalLensMode.ECO,
+    baseUrl: HttpUrl? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val controller = remember { ScanController(apiKey, proxyUrl, method, mode, scope, onComplete) }
+    val controller = remember { ScanController(apiKey, proxyUrl, method, mode, baseUrl, scope, onComplete) }
 
     DisposableEffect(Unit) {
         onDispose { controller.client?.stopStream() }

@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
 fun DemoApp() {
     val apiKey = BuildConfig.VITALLENS_API_KEY.takeIf { it.isNotBlank() }
     val proxyUrl = BuildConfig.VITALLENS_PROXY_URL.takeIf { it.isNotBlank() }?.toHttpUrlOrNull()
+    val baseUrl = BuildConfig.VITALLENS_BASE_URL.takeIf { it.isNotBlank() }?.toHttpUrlOrNull()
 
     if (apiKey == null && proxyUrl == null) {
         MissingKeyScreen()
@@ -111,16 +112,16 @@ fun DemoApp() {
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
                 0 -> if (cameraPermissionGranted) {
-                    MonitorScreen(apiKey = apiKey, proxyUrl = proxyUrl, showWaveforms = true)
+                    MonitorScreen(apiKey = apiKey, proxyUrl = proxyUrl, showWaveforms = true, baseUrl = baseUrl)
                 } else {
                     CameraPermissionRequiredScreen()
                 }
                 1 -> if (cameraPermissionGranted) {
-                    ScanScreen(apiKey = apiKey, proxyUrl = proxyUrl, onComplete = {})
+                    ScanScreen(apiKey = apiKey, proxyUrl = proxyUrl, onComplete = {}, baseUrl = baseUrl)
                 } else {
                     CameraPermissionRequiredScreen()
                 }
-                2 -> FileScreen(apiKey = apiKey, proxyUrl = proxyUrl)
+                2 -> FileScreen(apiKey = apiKey, proxyUrl = proxyUrl, baseUrl = baseUrl)
             }
         }
     }

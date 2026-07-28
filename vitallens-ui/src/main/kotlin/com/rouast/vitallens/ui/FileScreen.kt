@@ -107,6 +107,7 @@ private class FileController(
     private val apiKey: String?,
     private val proxyUrl: HttpUrl?,
     private val method: String,
+    private val baseUrl: HttpUrl?,
     private val scope: CoroutineScope,
 ) {
     var state by mutableStateOf(FileState.IDLE)
@@ -130,7 +131,13 @@ private class FileController(
         state = FileState.PROCESSING
         scope.launch {
             try {
-                val client = VitalLens(context = context, apiKey = apiKey, method = method, proxyUrl = proxyUrl)
+                val client = VitalLens(
+                    context = context,
+                    apiKey = apiKey,
+                    method = method,
+                    proxyUrl = proxyUrl,
+                    strategy = resolveCustomStrategy(apiKey, proxyUrl, method, overrideFps = null, baseUrl = baseUrl),
+                )
                 val result = client.processVideoFile(uri)
                 finalResult = result
                 val (primary, secondary, stats) = resolveFileVitals(result, VitalLensMode.STANDARD.fps)
@@ -160,10 +167,11 @@ fun FileScreen(
     apiKey: String? = null,
     proxyUrl: HttpUrl? = null,
     method: String = "vitallens",
+    baseUrl: HttpUrl? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val controller = remember { FileController(context, apiKey, proxyUrl, method, scope) }
+    val controller = remember { FileController(context, apiKey, proxyUrl, method, baseUrl, scope) }
 
     val pickVideoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { controller.process(it) }

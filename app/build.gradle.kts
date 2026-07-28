@@ -33,6 +33,10 @@ android {
 
         buildConfigField("String", "VITALLENS_API_KEY", "\"${demoCredential("VITALLENS_API_KEY")}\"")
         buildConfigField("String", "VITALLENS_PROXY_URL", "\"${demoCredential("VITALLENS_PROXY_URL")}\"")
+        // Only needed for a non-production API key (e.g. a dev-environment-scoped key) —
+        // ScanScreen/MonitorScreen/FileScreen's baseUrl parameter, threaded through
+        // VitalLensClientFactory.kt, is what actually makes this override effective.
+        buildConfigField("String", "VITALLENS_BASE_URL", "\"${demoCredential("VITALLENS_BASE_URL")}\"")
     }
 
     buildFeatures {
