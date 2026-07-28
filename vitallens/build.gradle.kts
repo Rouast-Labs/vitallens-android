@@ -1,7 +1,36 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.library)
+}
+
+/**
+ * Credentials for IntegrationTest's real-API tests (androidTest, not test — see that file).
+ *
+ * Mirrors vitallens-ios's IntegrationTests.swift, which reads VITALLENS_API_KEY/
+ * VITALLENS_BASE_URL via ProcessInfo.processInfo.environment: since Swift's whole test process
+ * shares the real OS environment, an env var set once (in the Xcode scheme locally, or a CI
+ * secret) is transparently visible everywhere, including inside APIInference's own lookup.
+ *
+ * Android has no such shortcut: an instrumented test runs in a separate process on a
+ * device/emulator that does not inherit the host shell's environment. Gradle (running on the
+ * host) is what actually sees `System.getenv()`/local.properties, so it must thread the value
+ * through explicitly via testInstrumentationRunnerArguments, which the test then reads via
+ * InstrumentationRegistry.getArguments() — not System.getenv().
+ *
+ * local.properties (already gitignored, already holds sdk.dir) is the local-dev-convenience
+ * option; a real shell-exported env var (matching CI) always takes precedence, so CI needs no
+ * separate local.properties handling.
+ */
+fun integrationTestCredential(key: String): String {
+    System.getenv(key)?.let { return it }
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { localProperties.load(it) }
+    }
+    return localProperties.getProperty(key) ?: ""
 }
 
 android {
@@ -11,6 +40,8 @@ android {
     defaultConfig {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["VITALLENS_API_KEY"] = integrationTestCredential("VITALLENS_API_KEY")
+        testInstrumentationRunnerArguments["VITALLENS_BASE_URL"] = integrationTestCredential("VITALLENS_BASE_URL")
     }
 
     compileOptions {
