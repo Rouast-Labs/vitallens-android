@@ -39,8 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-private val BACKGROUND_COLOR = Color(red = 0.06f, green = 0.07f, blue = 0.09f)
-private val PANEL_COLOR = Color(red = 0.12f, green = 0.12f, blue = 0.12f)
 private const val ROUAST_API_URL = "https://www.rouast.com/api/"
 
 /** One icon+text instructional guide shown on [StartScreen] ([GuideItem]'s content). */
@@ -73,7 +71,7 @@ fun StartScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(BACKGROUND_COLOR),
+            .background(VitalLensColors.Background),
     ) {
         Column(
             modifier = Modifier
@@ -115,7 +113,7 @@ fun StartScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(PANEL_COLOR, RoundedCornerShape(20.dp))
+                    .background(VitalLensColors.Panel, RoundedCornerShape(20.dp))
                     .padding(vertical = 16.dp),
             ) {
                 Row(Modifier.fillMaxWidth()) {
@@ -156,7 +154,7 @@ private fun ModeToggleRow(currentMode: VitalLensMode, onModeChange: (VitalLensMo
             .clickable {
                 onModeChange(if (currentMode == VitalLensMode.ECO) VitalLensMode.STANDARD else VitalLensMode.ECO)
             }
-            .background(PANEL_COLOR, RoundedCornerShape(20.dp))
+            .background(VitalLensColors.Panel, RoundedCornerShape(20.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
