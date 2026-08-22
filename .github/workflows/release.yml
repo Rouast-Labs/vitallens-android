@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish-maven-central:
+    name: Publish to Maven Central
+    runs-on: ubuntu-latest
+    # Requires manual approval in the "maven-central" GitHub Environment before this job's
+    # steps run — same gate vitallens-core uses for its own Kotlin/Android publish job.
+    environment: maven-central
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # No project-path prefix: Gradle runs this task in every subproject that defines it —
+      # vitallens-inference, vitallens, and vitallens-ui all apply com.vanniktech.maven.publish,
+      # so one invocation publishes and releases all three coordinates.
+      - name: Publish all modules to Maven Central
+        run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache --no-daemon --console=plain
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.SONATYPE_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.SONATYPE_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.GPG_KEY_ID }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: publish-maven-central
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "${{ github.ref_name }}" \
+            --generate-notes

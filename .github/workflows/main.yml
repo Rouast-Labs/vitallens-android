@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build, Lint, and Unit Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Runs compile + lint + unit tests across all four modules (vitallens-inference,
+      # vitallens, vitallens-ui, app). Instrumented tests (connectedAndroidTest — CameraX,
+      # ML Kit, MediaCodec decode) need a real device/emulator and real API credentials
+      # (see vitallens/build.gradle.kts's integrationTestCredential), so they aren't run here;
+      # they're a manual/local check for now (`./gradlew connectedAndroidTest` against a
+      # connected device, as used throughout this SDK's development).
+      - name: Build
+        run: ./gradlew build --console=plain

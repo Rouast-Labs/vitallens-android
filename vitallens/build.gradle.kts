@@ -1,8 +1,12 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.SourcesJar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 /**
@@ -99,4 +103,54 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+// ==========================================
+// Publishing (Maven Central via the Central Portal)
+// ==========================================
+
+mavenPublishing {
+    configure(
+        AndroidSingleVariantLibrary(
+            JavadocJar.Empty(),
+            SourcesJar.Sources(),
+            "release",
+        )
+    )
+    publishToMavenCentral()
+
+    // Only sign when credentials are actually present — see vitallens-inference's identical
+    // block for why this is conditional.
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
+
+    coordinates("com.rouast", "vitallens", version.toString())
+
+    pom {
+        name.set("VitalLens")
+        description.set("Camera, face detection, and image processing for the VitalLens Android SDK.")
+        url.set("https://github.com/Rouast-Labs/vitallens-android")
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("rouast-labs")
+                name.set("Rouast Labs")
+                url.set("https://github.com/Rouast-Labs")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/Rouast-Labs/vitallens-android")
+            connection.set("scm:git:git://github.com/Rouast-Labs/vitallens-android.git")
+            developerConnection.set("scm:git:ssh://git@github.com/Rouast-Labs/vitallens-android.git")
+        }
+    }
 }

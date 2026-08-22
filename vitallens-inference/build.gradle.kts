@@ -1,8 +1,12 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.SourcesJar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.vanniktech.maven.publish)
 }
 
 android {
@@ -52,4 +56,57 @@ dependencies {
     // test (no Robolectric here) — needed to fake a Bitmap reference for tests that
     // don't care about actual pixel behavior, only that it flows through unchanged.
     testImplementation(libs.mockito.kotlin)
+}
+
+// ==========================================
+// Publishing (Maven Central via the Central Portal)
+// ==========================================
+
+mavenPublishing {
+    configure(
+        AndroidSingleVariantLibrary(
+            JavadocJar.Empty(),
+            SourcesJar.Sources(),
+            "release",
+        )
+    )
+    publishToMavenCentral()
+
+    // Only sign when credentials are actually present (in CI, via the maven-central GitHub
+    // Environment's GPG_PRIVATE_KEY/GPG_PASSPHRASE secrets, exposed as
+    // ORG_GRADLE_PROJECT_signingInMemoryKey* env vars) — mirrors vitallens-core's Kotlin/Android
+    // publish setup exactly, including why this is conditional rather than an unconditional
+    // signAllPublications() (breaks a local `./gradlew publishToMavenLocal` with no GPG key).
+    if (project.hasProperty("signingInMemoryKey")) {
+        signAllPublications()
+    }
+
+    coordinates("com.rouast", "vitallens-inference", version.toString())
+
+    pom {
+        name.set("VitalLens Inference")
+        description.set("Headless vital sign estimation engine for the VitalLens Android SDK — bring your own frame source.")
+        url.set("https://github.com/Rouast-Labs/vitallens-android")
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("rouast-labs")
+                name.set("Rouast Labs")
+                url.set("https://github.com/Rouast-Labs")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/Rouast-Labs/vitallens-android")
+            connection.set("scm:git:git://github.com/Rouast-Labs/vitallens-android.git")
+            developerConnection.set("scm:git:ssh://git@github.com/Rouast-Labs/vitallens-android.git")
+        }
+    }
 }
