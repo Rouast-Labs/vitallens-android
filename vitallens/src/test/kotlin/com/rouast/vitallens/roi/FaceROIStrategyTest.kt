@@ -7,6 +7,7 @@ import com.rouast.vitallens.inference.ROICalculator
 import com.rouast.vitallens.inference.Rect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -53,10 +54,21 @@ class FaceROIStrategyTest {
         val initialRoi = strategy.determineROI(dummyBitmap, ImageOrientation.UP, isMirrored = false, roiMethod = "face")
         assertNull(initialRoi)
 
-        delay(100)
-        assertEquals(1, detector.callCount)
+        // Polls for the background detection to land instead of asserting after a fixed delay:
+        // a bounded real-time sleep here previously raced the scope.launch dispatch onto
+        // Dispatchers.Default, which is genuinely CI-runner-speed-dependent — a busier/shared
+        // runner can take longer than a comfortable local-machine margin to even start running
+        // the coroutine. Polling waits exactly as long as actually needed, up to a generous
+        // timeout, so this no longer depends on guessing a large-enough constant.
+        var subsequentRoi: Rect? = null
+        withTimeout(2000) {
+            while (subsequentRoi == null) {
+                delay(10)
+                subsequentRoi = strategy.determineROI(dummyBitmap, ImageOrientation.UP, isMirrored = false, roiMethod = "face")
+            }
+        }
 
-        val subsequentRoi = strategy.determineROI(dummyBitmap, ImageOrientation.UP, isMirrored = false, roiMethod = "face")
+        assertEquals(1, detector.callCount)
         assertEquals(expectedRect, subsequentRoi)
     }
 
