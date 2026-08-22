@@ -1,6 +1,6 @@
 # API Reference
 
-The `VitalLens` class is the main entry point for the SDK. Use this class directly if you are building a custom camera experience, integrating into an existing `CameraX`/`Camera2` pipeline, or processing video files in the background without using the pre-built Compose screens.
+The `VitalLens` class is the main entry point for the SDK. Use this class directly if you are building a custom camera experience or integrating into an existing `CameraX`/`Camera2` pipeline without using the pre-built Compose screens.
 
 ## Initialization
 
@@ -143,25 +143,6 @@ Clears the internal data buffers (PPG history, face tracking state) without stop
 
 ```kotlin
 client.resetStream()
-```
-
-### `processVideoFile(uri)`
-
-Processes a local video file in batch mode. Automatically extracts frames, detects the most prominent face, and communicates with the API.
-
-**Parameters:**
-
-- `uri`: The local `Uri` of the video file (e.g., `.mp4` or `.mov`).
-
-**Returns:** `VitalLensResult`
-
-```kotlin
-try {
-    val result = client.processVideoFile(videoUri)
-    println("Avg HR: ${result.heartRate?.value ?: 0}")
-} catch (e: Exception) {
-    println("File processing failed: $e")
-}
 ```
 
 ### `close()`

@@ -17,8 +17,8 @@
 The library provides:
 
 - **High-Fidelity Accuracy:** A simple interface to the VitalLens API for state-of-the-art estimation (heart rate, respiratory rate, HRV).
-- **Drop-in UI Components:** Ready-made Jetpack Compose screens (`ScanScreen`, `MonitorScreen`, `FileScreen`) for instant integration into your app.
-- **Flexible Input:** Support for live Android camera streams (via CameraX) and local video file processing.
+- **Drop-in UI Components:** Ready-made Jetpack Compose screens (`ScanScreen`, `MonitorScreen`) for instant integration into your app.
+- **Live Camera Input:** Support for live Android camera streams via CameraX.
 - **Fast Face Detection:** Native face detection and ROI management using Google's ML Kit.
 - **Pluggable Architecture:** Built on a strategy pattern, allowing you to swap the remote API backend for your own on-device model (TFLite, ONNX Runtime, or anything else).
 

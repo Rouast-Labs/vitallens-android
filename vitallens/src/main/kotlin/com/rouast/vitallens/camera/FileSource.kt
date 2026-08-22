@@ -2,10 +2,8 @@ package com.rouast.vitallens.camera
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.ImageFormat
-import android.media.Image
-import android.media.ImageReader
 import android.media.MediaCodec
+import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -17,17 +15,15 @@ import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.VitalLensException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
 
 private const val DEFAULT_FRAME_RATE = 30.0f
 private const val LOG_TAG = "FileSource"
 private const val DEQUEUE_TIMEOUT_US = 10_000L
-private const val IMAGE_ACQUIRE_MAX_ATTEMPTS = 50
-private const val IMAGE_ACQUIRE_RETRY_DELAY_MS = 2L
 
 /**
  * Parses a nominal frame rate from whatever `MediaMetadataRetriever` metadata is actually
@@ -50,89 +46,74 @@ internal fun parseFrameRate(captureFrameRate: String?, frameCount: String?, dura
     return DEFAULT_FRAME_RATE
 }
 
-/**
- * Packs a [ImageFormat.YUV_420_888] [Image]'s three (possibly differently-strided) planes into a
- * single interleaved NV21-layout byte array (Y plane, then interleaved V,U pairs) — a convenient
- * single buffer for [imageToBitmap]'s conversion loop to index into, rather than juggling three
- * separately-strided plane buffers there directly.
- */
-private fun imageToNv21(image: Image): ByteArray {
-    val width = image.width
-    val height = image.height
-    val yPlane = image.planes[0]
-    val uPlane = image.planes[1]
-    val vPlane = image.planes[2]
-
-    val nv21 = ByteArray(width * height + 2 * (width / 2) * (height / 2))
-
-    var pos = 0
-    val yBuffer = yPlane.buffer
-    for (row in 0 until height) {
-        yBuffer.position(row * yPlane.rowStride)
-        yBuffer.get(nv21, pos, width)
-        pos += width
-    }
-
-    if (vPlane.pixelStride == 2 && uPlane.pixelStride == 2) {
-        // Semi-planar on many devices: U and V are actually offset views into the *same*
-        // underlying interleaved buffer (already V,U,V,U,... — NV21's own order), with pixelStride
-        // 2 as the tell. Reading both "separate" plane buffers independently can throw
-        // "buffer is inaccessible" (observed on a real device/emulator) since they alias the same
-        // native memory — bulk-copy from the V plane alone instead, which already carries both.
-        val vBuffer = vPlane.buffer
-        for (row in 0 until height / 2) {
-            vBuffer.position(row * vPlane.rowStride)
-            vBuffer.get(nv21, pos, width)
-            pos += width
-        }
-    } else {
-        // Fully planar: U and V are independent buffers, interleaved manually as V,U,V,U,...
-        // Relative position()+get(), not absolute get(index): some Image-plane ByteBuffer
-        // implementations only reliably support relative access — absolute indexed get() threw
-        // "buffer is inaccessible" against a real device/emulator here, while the Y-plane's own
-        // relative position()+bulk-get() above did not.
-        val vBuffer = vPlane.buffer
-        val uBuffer = uPlane.buffer
-        for (row in 0 until height / 2) {
-            for (col in 0 until width / 2) {
-                vBuffer.position(row * vPlane.rowStride + col * vPlane.pixelStride)
-                nv21[pos++] = vBuffer.get()
-                uBuffer.position(row * uPlane.rowStride + col * uPlane.pixelStride)
-                nv21[pos++] = uBuffer.get()
-            }
-        }
-    }
-
-    return nv21
-}
+private fun MediaFormat.getIntegerOrNull(key: String): Int? = if (containsKey(key)) getInteger(key) else null
 
 /**
- * Converts a [ImageFormat.YUV_420_888] [Image] (from an [ImageReader]-backed [MediaCodec] decode
- * surface) into a [Bitmap] via a direct BT.601 integer YUV→RGB conversion.
+ * Converts one YUV 4:2:0 output buffer from a buffer-mode [MediaCodec] decode (no output
+ * [android.view.Surface]) into a [Bitmap] via a direct BT.601 integer YUV→RGB conversion.
  *
- * [YuvImage.compressToJpeg] (the "pure Kotlin/JVM... YuvImage... for... YUV→RGB conversion" tool
- * CLAUDE.md's ground rules otherwise sanction for exactly this) was tried first, but measurably
- * degraded rPPG signal quality: a real end-to-end integration test against the live API had HRV
- * SDNN drift to 85.6 against a 65.0±10.0 ground-truth tolerance (heart rate and everything else
- * stayed within tolerance) — JPEG's 4:2:0 chroma subsampling is inherent to the format regardless
- * of quality setting, adding a second, avoidable round of color-precision loss on top of the
- * source video's own existing subsampling. This conversion has no such extra loss; it's still
- * pure Kotlin/JVM math, not a native library.
+ * [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible], requested at configure time, is
+ * one of two concrete layouts here: fully planar (Y, then U, then V, each its own contiguous
+ * plane — [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar]/`PackedPlanar`) or
+ * semi-planar (Y, then a single interleaved Cb/Cr plane, Cb first —
+ * `COLOR_FormatYUV420SemiPlanar`/`PackedSemiPlanar`, i.e. NV12's byte order). Any other reported
+ * value is treated as semi-planar, the overwhelmingly common concrete choice real hardware
+ * decoders make for a flexible request. [stride]/[sliceHeight] come from the decoder's own output
+ * [MediaFormat] (`KEY_STRIDE`/`KEY_SLICE_HEIGHT`), not [width]/[height] — codecs commonly pad the
+ * coded buffer to a macroblock-aligned size (e.g. 1080 rounds up to a slice height of 1088), and
+ * the row/plane math here needs the real padded layout to index correctly.
+ *
+ * This buffer-mode path replaces an earlier version that decoded onto a [android.view.Surface]
+ * backed by an [android.media.ImageReader] configured for `ImageFormat.YUV_420_888`, manually
+ * walking `Image.getPlanes()`. That let the decoder pick its own output buffer layout for display
+ * efficiency — on a real Samsung Exynos device, the returned `Image` reported a Y-plane row
+ * stride of 4x the frame width (not a padding artifact — every read the old code performed was
+ * within the reported buffer capacity, yet it still crashed), evidence of a vendor-private/tiled
+ * layout that `Image.Plane`'s stride/pixel-stride metadata didn't describe correctly. The result
+ * was a native `SIGSEGV` reading past the plane `ByteBuffer`'s actual mapped memory — unrecoverable
+ * from Kotlin, since no `try`/`catch` stops a native crash. Buffer-mode output has no such
+ * escape hatch for the vendor: [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible] is a
+ * CDD-mandated format every AOSP-compliant decoder (hardware or software) has been required to
+ * support since API 21, specifically so callers aren't exposed to private buffer layouts — the
+ * same guarantee `vitallens-ios`'s `AVAssetReaderTrackOutput` leans on by requesting
+ * `kCVPixelFormatType_32BGRA` explicitly rather than trusting whatever the decoder produces.
  */
-private fun imageToBitmap(image: Image): Bitmap {
-    val width = image.width
-    val height = image.height
-    val nv21 = imageToNv21(image)
-    val ySize = width * height
-    val pixels = IntArray(ySize)
+private fun decodeYuvBufferToBitmap(
+    buffer: ByteBuffer,
+    offset: Int,
+    width: Int,
+    height: Int,
+    colorFormat: Int,
+    stride: Int,
+    sliceHeight: Int,
+): Bitmap {
+    val rowStride = if (stride > 0) stride else width
+    val ySliceHeight = if (sliceHeight > 0) sliceHeight else height
+    val semiPlanar = colorFormat != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar &&
+        colorFormat != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedPlanar
 
+    val ySize = rowStride * ySliceHeight
+    val chromaRowStride = if (semiPlanar) rowStride else rowStride / 2
+    val uStart = offset + ySize
+    val vStart = if (semiPlanar) uStart else uStart + chromaRowStride * (ySliceHeight / 2)
+
+    val pixels = IntArray(width * height)
     for (row in 0 until height) {
-        val uvRowOffset = ySize + (row / 2) * width
+        val yRowStart = offset + row * rowStride
+        val chromaRow = row / 2
         for (col in 0 until width) {
-            val y = nv21[row * width + col].toInt() and 0xFF
-            val uvIndex = uvRowOffset + (col / 2) * 2
-            val v = (nv21[uvIndex].toInt() and 0xFF) - 128
-            val u = (nv21[uvIndex + 1].toInt() and 0xFF) - 128
+            val y = buffer.get(yRowStart + col).toInt() and 0xFF
+            val u: Int
+            val v: Int
+            if (semiPlanar) {
+                val uvIndex = uStart + chromaRow * chromaRowStride + (col / 2) * 2
+                u = (buffer.get(uvIndex).toInt() and 0xFF) - 128
+                v = (buffer.get(uvIndex + 1).toInt() and 0xFF) - 128
+            } else {
+                val chromaCol = col / 2
+                u = (buffer.get(uStart + chromaRow * chromaRowStride + chromaCol).toInt() and 0xFF) - 128
+                v = (buffer.get(vStart + chromaRow * chromaRowStride + chromaCol).toInt() and 0xFF) - 128
+            }
 
             val y1192 = 1192 * (y - 16)
             val r = ((y1192 + 1634 * v) shr 10).coerceIn(0, 255)
@@ -169,32 +150,16 @@ class FileSource private constructor(
     /**
      * Reads frames sequentially via hardware-accelerated decode, in container order.
      *
-     * The decoder writes to an [ImageReader] surface. An RGBA-format surface was tried first
-     * (matching how [com.rouast.vitallens.camera.CameraSource] gets RGBA "for free" via CameraX's
-     * `OUTPUT_IMAGE_FORMAT_RGBA_8888`), but unlike CameraX — which does its own GPU conversion
-     * internally — a raw [MediaCodec] decode surface only outputs whatever colorspace the
-     * decoder actually produces; the real device/emulator this was tested against threw
-     * `UnsupportedOperationException` when the requested surface format didn't match. The
-     * [ImageReader] is configured for [ImageFormat.YUV_420_888] instead (matching the decoder's
-     * actual output), converted to [Bitmap] via a direct integer YUV→RGB conversion (see
-     * `imageToBitmap`'s own KDoc for why this isn't `YuvImage.compressToJpeg`, CLAUDE.md's
-     * otherwise-sanctioned tool for this).
-     *
-     * [ImageReader] delivers images via an async callback rather than synchronously right after
-     * `releaseOutputBuffer` — an earlier version bridged that callback into this loop via a
-     * cross-thread channel handoff, but hit a genuine race (`IllegalStateException: Image is
-     * already closed` on a real device/emulator) that a same-thread design sidesteps entirely.
-     * Instead, [ImageReader.acquireNextImage] is polled with a short bounded retry here, still on
-     * the same thread/coroutine as the rest of the decode loop — no callback, no second thread,
-     * no cross-thread lifecycle race possible. This keeps the same one-frame-at-a-time
-     * backpressure a plain `flow { emit(...) }` gives for free (the loop doesn't decode/release
-     * the next frame until this one has been emitted), rather than letting a fast decoder buffer
-     * an entire video's worth of frames (hundreds of MB) ahead of a slower collector.
+     * Buffer-mode decode (`decoder.configure(format, /* surface = */ null, null, 0)`, requesting
+     * [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible]) — see [decodeYuvBufferToBitmap]'s
+     * own KDoc for why this replaced an earlier `Surface`/`ImageReader` version. This also drops the
+     * async image-acquire retry loop that version needed: [MediaCodec.getOutputBuffer] returns
+     * synchronously right after [MediaCodec.dequeueOutputBuffer], no producer/consumer handoff to
+     * an [android.media.ImageReader] involved.
      */
     fun frames(): Flow<Bitmap> = flow {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
-        var imageReader: ImageReader? = null
 
         try {
             extractor.setDataSource(context, uri, null)
@@ -209,20 +174,19 @@ class FileSource private constructor(
             val format = extractor.getTrackFormat(trackIndex)
             extractor.selectTrack(trackIndex)
             val mime = requireNotNull(format.getString(MediaFormat.KEY_MIME))
-            val width = format.getInteger(MediaFormat.KEY_WIDTH)
-            val height = format.getInteger(MediaFormat.KEY_HEIGHT)
-
-            val reader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 2)
-            imageReader = reader
+            var width = format.getInteger(MediaFormat.KEY_WIDTH)
+            var height = format.getInteger(MediaFormat.KEY_HEIGHT)
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
 
             val decoder = MediaCodec.createDecoderByType(mime)
             codec = decoder
-            decoder.configure(format, reader.surface, null, 0)
+            decoder.configure(format, null, null, 0)
             decoder.start()
 
             val bufferInfo = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
+            var outputFormat = decoder.outputFormat
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -241,27 +205,33 @@ class FileSource private constructor(
                 }
 
                 val outputIndex = decoder.dequeueOutputBuffer(bufferInfo, DEQUEUE_TIMEOUT_US)
-                if (outputIndex >= 0) {
+                if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    outputFormat = decoder.outputFormat
+                    width = outputFormat.getIntegerOrNull(MediaFormat.KEY_WIDTH) ?: width
+                    height = outputFormat.getIntegerOrNull(MediaFormat.KEY_HEIGHT) ?: height
+                } else if (outputIndex >= 0) {
                     val isEos = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    val shouldRender = bufferInfo.size > 0
-                    decoder.releaseOutputBuffer(outputIndex, shouldRender)
-                    if (shouldRender) {
-                        var image: Image? = null
-                        var attempt = 0
-                        while (image == null && attempt < IMAGE_ACQUIRE_MAX_ATTEMPTS) {
-                            image = reader.acquireNextImage()
-                            if (image == null) {
-                                delay(IMAGE_ACQUIRE_RETRY_DELAY_MS)
-                                attempt++
-                            }
-                        }
-                        if (image != null) {
-                            emit(imageToBitmap(image))
-                            image.close()
-                        } else {
-                            Log.e(LOG_TAG, "Timed out waiting for a decoded frame from ImageReader")
+                    if (bufferInfo.size > 0) {
+                        val outputBuffer = decoder.getOutputBuffer(outputIndex)
+                        if (outputBuffer != null) {
+                            val colorFormat = outputFormat.getIntegerOrNull(MediaFormat.KEY_COLOR_FORMAT)
+                                ?: MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+                            val stride = outputFormat.getIntegerOrNull(MediaFormat.KEY_STRIDE) ?: width
+                            val sliceHeight = outputFormat.getIntegerOrNull(MediaFormat.KEY_SLICE_HEIGHT) ?: height
+                            emit(
+                                decodeYuvBufferToBitmap(
+                                    buffer = outputBuffer,
+                                    offset = bufferInfo.offset,
+                                    width = width,
+                                    height = height,
+                                    colorFormat = colorFormat,
+                                    stride = stride,
+                                    sliceHeight = sliceHeight,
+                                )
+                            )
                         }
                     }
+                    decoder.releaseOutputBuffer(outputIndex, false)
                     if (isEos) outputDone = true
                 }
             }
@@ -278,7 +248,6 @@ class FileSource private constructor(
                 runCatching { it.stop() }
                 runCatching { it.release() }
             }
-            imageReader?.close()
             extractor.release()
         }
     }.flowOn(Dispatchers.IO)

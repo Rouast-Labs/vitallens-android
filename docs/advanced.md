@@ -102,7 +102,7 @@ val client = VitalLens(
 
 ## Custom API Host
 
-`ScanScreen`/`MonitorScreen`/`FileScreen` accept an optional `baseUrl` parameter that overrides the default production API host — useful for pointing at a self-hosted proxy or a staging environment during development.
+`ScanScreen`/`MonitorScreen` accept an optional `baseUrl` parameter that overrides the default production API host — useful for pointing at a self-hosted proxy or a staging environment during development.
 
 ```kotlin
 ScanScreen(

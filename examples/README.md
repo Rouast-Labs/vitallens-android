@@ -76,31 +76,6 @@ fun CustomCameraExample() {
 }
 ```
 
-## Analyzing Video Files
-
-You can process pre-recorded video files (e.g., picked from the device's photo library or bundled with your app). The SDK handles chunking, frame extraction, and API communication automatically.
-
-```kotlin
-import android.net.Uri
-import com.rouast.vitallens.VitalLens
-
-suspend fun analyzeLocalVideo(context: Context, videoUri: Uri) {
-    val client = VitalLens(context = context, apiKey = "YOUR_API_KEY", method = "vitallens-2.0")
-
-    try {
-        println("Processing video file...")
-        val result = client.processVideoFile(videoUri)
-
-        println("--- Final Results ---")
-        println("Avg Heart Rate:   ${result.heartRate?.value ?: 0} bpm")
-        println("Respiratory Rate: ${result.respiratoryRate?.value ?: 0} rpm")
-        println("HRV (SDNN):       ${result.hrvSdnn?.value ?: 0} ms")
-    } catch (e: Exception) {
-        println("Analysis failed: $e")
-    }
-}
-```
-
 ## Bring Your Own Camera (`PassiveSource`)
 
 If your app already controls its own camera pipeline (for instance, you are using CameraX for another purpose, ARCore, or custom recording), use `PassiveSource` to inject `Bitmap` frames directly into the SDK.
