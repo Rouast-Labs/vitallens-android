@@ -82,6 +82,15 @@ class CameraSource(private val context: Context) : CameraStreaming {
 
         val provider = getCameraProvider()
 
+        // TODO: Camera control for rPPG stability (auto AE/AWB shifts are global brightness/colour
+        //   changes far larger than the pulse signal, and also trigger false light_quality dips).
+        //   Make it an option, default on, best effort (device support varies):
+        //   - Camera2Interop.Extender on the ImageAnalysis/Preview builders:
+        //     CONTROL_AE_TARGET_FPS_RANGE = (30, 30) (or (15, 15) for eco mode).
+        //   - After ~1-2 s of convergence with a face in view, set CONTROL_AE_LOCK = true and
+        //     CONTROL_AWB_LOCK = true (and fix focus, e.g. CONTROL_AF_MODE_OFF at current distance).
+        //   - If ROI brightness drifts beyond a threshold, unlock, re-converge, re-lock.
+        //   - Never derive exposure/gains from skin-tone colour statistics (patent EP4353143A1).
         val analysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
