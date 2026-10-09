@@ -95,6 +95,10 @@ class CameraSource(private val context: Context) : CameraStreaming {
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
+        // TODO: The analyzer runs on the main executor, so onFrame's full-frame image.toBitmap()
+        //   (~1.2 MB at 640x480) is allocated on the UI thread ~30x/s -> jank and GC pressure. Use a
+        //   dedicated background executor, and ideally crop to the ROI before conversion or reuse one
+        //   bitmap across frames.
         analysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { image -> onFrame(image) }
 
         val preview = Preview.Builder().build()

@@ -63,6 +63,12 @@ object ImageProcessor {
             if (isMirrored) postScale(-1f, 1f, targetSize / 2f, targetSize / 2f)
         }
 
+        // TODO: createBitmap with a scaling matrix (filter=true) is plain bilinear without
+        //   antialiasing - at large downscale factors (e.g. ~300px -> 40px) it samples ~4 source px per
+        //   output px, discarding the spatial averaging that lifts the pulse above sensor noise, and
+        //   mismatching training (ffmpeg bicubic) / Python (box) / iOS (vImage). Use box/area averaging
+        //   over the cropped pixels instead (or a shared box-downsample in vitallens-core).
+        //   Verify first: same recording via Python vs Android, compare confidence/SNR.
         return Bitmap.createBitmap(bitmap, crop.x, crop.y, crop.width, crop.height, matrix, true)
     }
 
