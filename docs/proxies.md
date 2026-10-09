@@ -20,7 +20,7 @@ When `proxyUrl` is set, the SDK **will not** attach an `X-Api-Key` header. It wi
 
 ## 2. Implement the Backend
 
-Your proxy must handle three specific endpoints and forward them to the VitalLens API (`https://api.rouast.com/vitallens-v3`).
+Your proxy must handle two specific endpoints and forward them to the VitalLens API (`https://api.rouast.com/vitallens-v3`).
 
 For all requests, your proxy must:
 
@@ -37,10 +37,6 @@ For all requests, your proxy must:
     - **Purpose:** Processes live camera frames in real-time.
     - **Headers to Forward:** `Content-Type: application/octet-stream`, `X-Origin`, `X-Encoding`, `X-Model`, `X-State`.
     - **Body:** Forward the raw binary body exactly as received (the Android client compresses it using gzip).
-3. POST `/file`
-    - **Purpose:** Processes pre-recorded video files.
-    - **Headers to Forward:** `Content-Type: application/json`.
-    - **Body:** Forward the JSON payload exactly as received (contains Base64 encoded video and state).
 
 ### Example Reference
 
