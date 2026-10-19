@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -90,9 +91,13 @@ internal fun resolveMonitorFeedback(
     else -> MonitorState.TRACKING to "Tracking vitals"
 }
 
-/** The width of a [GroupedMetricsTile], or `null` to let it fill remaining space. */
+/**
+ * The width of a [GroupedMetricsTile], or `null` to let it fill remaining space. The metrics are
+ * plain text next to the chart, so the column is only as wide as its content (the JS Monitor uses a
+ * fixed 85 px plus padding) and the chart gets the rest. It does not change when HRV appears.
+ */
 internal fun dynamicTileWidth(showWaveforms: Boolean, hasSecondaryVitals: Boolean): Int? =
-    if (!showWaveforms) null else if (hasSecondaryVitals) 170 else 110
+    if (!showWaveforms) null else 100
 
 /** The display format for a vital id. */
 internal fun monitorVitalFormat(id: String?): String =
@@ -204,6 +209,7 @@ private class MonitorController(
         autoFallbackDone = false
         isProcessing = true
         monitorState = MonitorState.SEARCHING
+        messageHold.release()
         feedbackMessage = "Face the camera and hold still."
     }
 
@@ -212,6 +218,7 @@ private class MonitorController(
         sessionJob?.cancel()
         isProcessing = false
         monitorState = MonitorState.IDLE
+        messageHold.release()
         feedbackMessage = ""
         client?.stopStream()
         playbackJob?.cancel()
@@ -238,9 +245,27 @@ private class MonitorController(
         isFaceCurrentlyDetected = false
     }
 
+    /**
+     * Keeps problem hints on screen long enough to read: a hint stays for at least 3 s, even if the
+     * problem is gone, and messages arriving meanwhile wait.
+     */
+    private val messageHold = MessageHold(
+        schedule = { delayMs, action ->
+            val job = scope.launch {
+                delay(delayMs)
+                action()
+            }
+            val cancel: () -> Unit = { job.cancel() }
+            cancel
+        },
+        apply = { text, _ ->
+            if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force = false)) feedbackMessage = text
+        },
+    )
+
     /** Sets the feedback message, unless a notice is being shown. */
-    private fun setFeedback(message: String) {
-        if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force = false)) feedbackMessage = message
+    private fun setFeedback(message: String, hold: Boolean = false) {
+        messageHold.show(message, hold = hold)
     }
 
     /** Stops the monitor because the connection is too unstable to continue. */
@@ -248,6 +273,7 @@ private class MonitorController(
         if (!isProcessing || monitorState == MonitorState.IDLE) return
         client?.stopStream()
         monitorState = MonitorState.ISSUE
+        messageHold.release()
         feedbackMessage = ConnectionThresholds.UNSTABLE_MESSAGE
         scope.launch {
             delay(3_000)
@@ -289,6 +315,7 @@ private class MonitorController(
         isFaceCurrentlyDetected = false
 
         monitorState = MonitorState.SEARCHING
+        messageHold.release()
         feedbackMessage = SLOW_CONNECTION_MESSAGE
         noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
 
@@ -374,7 +401,7 @@ private class MonitorController(
 
         if (currentFaceConf < FACE_CONF_THRESHOLD) {
             monitorState = MonitorState.ISSUE
-            setFeedback("Face not clear. Hold still.")
+            setFeedback("Face not clear. Hold still.", hold = true)
             return
         }
 
@@ -395,7 +422,7 @@ private class MonitorController(
             hasEnoughData = hasEnoughData,
         )
         monitorState = newState
-        setFeedback(newMessage)
+        setFeedback(newMessage, hold = newMessage == LOW_CONFIDENCE_MESSAGE)
     }
 
     private fun queueWaveformData(result: VitalLensResult) {
@@ -602,6 +629,7 @@ private fun MonitorBottomMetrics(controller: MonitorController) {
                     history = controller.ppgHistory,
                     isReady = controller.isPpgReady,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
+                    useShortTitle = true,
                 )
             }
             GroupedMetricsTile(
@@ -622,6 +650,7 @@ private fun MonitorBottomMetrics(controller: MonitorController) {
                     history = controller.respHistory,
                     isReady = controller.isRespReady,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
+                    useShortTitle = true,
                 )
             }
             GroupedMetricsTile(
@@ -649,39 +678,43 @@ private fun GroupedMetricsTile(
 ) {
     val pInfo = VitalInfoCache.getInfo(primaryId)
 
-    Row(
-        modifier = modifier.background(VitalLensColors.Panel, RoundedCornerShape(12.dp)),
-        verticalAlignment = Alignment.CenterVertically,
+    // Plain text on the panel, like the JS Monitor: title, value with its unit, then the secondary
+    // metrics as label-and-value rows underneath.
+    Column(
+        modifier = modifier.padding(start = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
     ) {
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(pInfo?.shortName ?: primaryId, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                pInfo?.unit?.uppercase()?.takeIf { it.isNotEmpty() }?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
-                }
-            }
+        Text(
+            pInfo?.shortName ?: primaryId,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.Gray,
+        )
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (isPrimaryReady && primaryValue != null) {
                 Text(
                     String.format(Locale.US, monitorVitalFormat(primaryId), primaryValue),
                     style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                    maxLines = 1,
                 )
             } else {
                 Text(
                     "--",
                     style = MaterialTheme.typography.headlineMedium,
+                    fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.3f),
                 )
             }
+            pInfo?.unit?.uppercase()?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(bottom = 6.dp))
+            }
         }
-
         if (secondary1Id != null || secondary2Id != null) {
-            Column(
-                modifier = Modifier.weight(1f).padding(end = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Column(modifier = Modifier.padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 secondary1Id?.let { SecondaryMetric(it, secondary1Value, isSecondary1Ready) }
                 secondary2Id?.let { SecondaryMetric(it, secondary2Value, isSecondary2Ready) }
             }
@@ -689,25 +722,33 @@ private fun GroupedMetricsTile(
     }
 }
 
+/** A secondary metric: its label, then the value and a small unit. */
 @Composable
 private fun SecondaryMetric(id: String, value: Double?, isReady: Boolean) {
     val meta = VitalInfoCache.getInfo(id)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(meta?.shortName ?: id, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            meta?.unit?.uppercase()?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray.copy(alpha = 0.6f))
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(meta?.shortName ?: id, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (isReady && value != null) {
+                Text(
+                    String.format(Locale.US, monitorVitalFormat(id), value),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+            } else {
+                Text(
+                    "--",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White.copy(alpha = 0.3f),
+                )
             }
-        }
-        if (isReady && value != null) {
-            Text(
-                String.format(Locale.US, monitorVitalFormat(id), value),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            )
-        } else {
-            Text("--", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.3f))
+            meta?.unit?.lowercase()?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
         }
     }
 }

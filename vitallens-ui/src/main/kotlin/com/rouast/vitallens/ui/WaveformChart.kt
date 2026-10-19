@@ -112,9 +112,15 @@ fun WaveformChart(
 
 /** A titled card wrapping [WaveformChart] with a standard background and loading state. */
 @Composable
-fun WaveformContainer(vitalId: String, history: List<Double>, isReady: Boolean, modifier: Modifier = Modifier) {
+fun WaveformContainer(
+    vitalId: String,
+    history: List<Double>,
+    isReady: Boolean,
+    modifier: Modifier = Modifier,
+    useShortTitle: Boolean = false,
+) {
     val meta = VitalInfoCache.getInfo(vitalId)
-    val title = meta?.displayName ?: vitalId
+    val title = (if (useShortTitle) meta?.shortName else null) ?: meta?.displayName ?: vitalId
     val chartColor = meta?.color?.let { parseHexColor(it) } ?: Color.Red
 
     Column(
