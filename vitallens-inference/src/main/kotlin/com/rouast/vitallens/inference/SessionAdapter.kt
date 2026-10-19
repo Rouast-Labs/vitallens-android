@@ -13,6 +13,12 @@ import com.rouast.vitallens.inference.model.Waveform
 import com.rouast.vitallens.inference.network.ModelConfig
 import com.rouast.vitallens.core.Rect as CoreRect
 
+/**
+ * Seconds at the start of a session that are not used when deriving HRV: the model's output is
+ * unsettled at first. Internal setting, not exposed to users.
+ */
+internal const val HRV_SKIP_SECONDS = 3f
+
 /** Converts this [ModelConfig] into a [SessionConfig] required by the Core engine. */
 fun ModelConfig.toSessionConfig(): SessionConfig = SessionConfig(
     modelName = modelName,
@@ -23,6 +29,7 @@ fun ModelConfig.toSessionConfig(): SessionConfig = SessionConfig(
     nInputs = nInputs.toULong(),
     roiMethod = roiMethod,
     estimateRollingVitals = null,
+    hrvSkipSeconds = HRV_SKIP_SECONDS,
 )
 
 /** Converts this [Rect] into the generated Core [CoreRect]. */

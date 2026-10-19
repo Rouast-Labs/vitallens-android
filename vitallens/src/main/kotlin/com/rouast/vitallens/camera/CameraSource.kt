@@ -3,6 +3,14 @@ package com.rouast.vitallens.camera
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -70,6 +78,7 @@ class CameraSource(private val context: Context) : CameraStreaming {
     private var cameraProvider: ProcessCameraProvider? = null
     private var previewUseCase: Preview? = null
     private var pendingPreviewView: PreviewView? = null
+    private var boundCamera: Camera? = null
 
     override suspend fun start() {
         if (cameraProvider != null) return
@@ -84,11 +93,11 @@ class CameraSource(private val context: Context) : CameraStreaming {
 
         // TODO: Camera control for rPPG stability (auto AE/AWB shifts are global brightness/colour
         //   changes far larger than the pulse signal, and also trigger false light_quality dips).
-        //   Make it an option, default on, best effort (device support varies):
+        //   Exposure and white balance are locked once a face is in view (see setSettingsLocked and
+        //   StreamProcessor). Still open, best effort (device support varies):
         //   - Camera2Interop.Extender on the ImageAnalysis/Preview builders:
-        //     CONTROL_AE_TARGET_FPS_RANGE = (30, 30) (or (15, 15) for eco mode).
-        //   - After ~1-2 s of convergence with a face in view, set CONTROL_AE_LOCK = true and
-        //     CONTROL_AWB_LOCK = true (and fix focus, e.g. CONTROL_AF_MODE_OFF at current distance).
+        //     CONTROL_AE_TARGET_FPS_RANGE = (30, 30) (or (15, 15) for eco mode), and fix focus, e.g.
+        //     CONTROL_AF_MODE_OFF at current distance.
         //   - If ROI brightness drifts beyond a threshold, unlock, re-converge, re-lock.
         //   - Never derive exposure/gains from skin-tone colour statistics (patent EP4353143A1).
         val analysis = ImageAnalysis.Builder()
@@ -112,7 +121,7 @@ class CameraSource(private val context: Context) : CameraStreaming {
         // be verified on a plain JVM unit test at all.
         withContext(Dispatchers.Main) {
             provider.unbindAll()
-            provider.bindToLifecycle(ProcessLifecycleOwner.get(), CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
+            boundCamera = provider.bindToLifecycle(ProcessLifecycleOwner.get(), CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
         }
         cameraProvider = provider
     }
@@ -121,11 +130,35 @@ class CameraSource(private val context: Context) : CameraStreaming {
         val provider = cameraProvider
         cameraProvider = null
         previewUseCase = null
+        boundCamera = null
         channel.close()
         // Fire-and-forget onto the main thread: unbindAll() must run on the main thread, but
         // stop() itself isn't suspend (matching CameraStreaming's synchronous contract), so this
         // can't await completion, only dispatch it.
         provider?.let { ContextCompat.getMainExecutor(context).execute { it.unbindAll() } }
+    }
+
+    /**
+     * Keeps the camera's current exposure and white balance, or returns to automatic.
+     *
+     * Uses the Camera2 auto-exposure and auto-white-balance locks, only where the device reports
+     * that they are available; anything else is left alone. Values are never derived from the image
+     * content: the camera keeps the ones it converged on.
+     */
+    @OptIn(markerClass = [ExperimentalCamera2Interop::class])
+    override fun setSettingsLocked(locked: Boolean) {
+        val camera = boundCamera ?: return
+        runCatching {
+            val info = Camera2CameraInfo.from(camera.cameraInfo)
+            val options = CaptureRequestOptions.Builder()
+            if (info.getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE) == true) {
+                options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, locked)
+            }
+            if (info.getCameraCharacteristic(CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE) == true) {
+                options.setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, locked)
+            }
+            Camera2CameraControl.from(camera.cameraControl).addCaptureRequestOptions(options.build())
+        }
     }
 
     override fun showPreview(view: PreviewView) {

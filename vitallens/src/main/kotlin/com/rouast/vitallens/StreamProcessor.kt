@@ -89,6 +89,13 @@ class StreamProcessor(
     private var session: Session? = null
     private var lastFacePresence: Boolean = false
     private var onFaceStateChanged: ((Boolean) -> Unit)? = null
+    private var cameraLocked = false
+    private var cameraLockJob: Job? = null
+    private val cameraLockState = Any()
+
+    /** How long (ms) a face must be in view before the camera's exposure and white balance are locked. */
+    internal var cameraLockDelayMs: Long = 1_500
+
     private var onSlowConnection: (() -> Unit)? = null
     private var onConnectionUnstable: (() -> Unit)? = null
     private val connectionMonitor = ConnectionMonitor()
@@ -121,6 +128,8 @@ class StreamProcessor(
             session?.close()
             session = Session(resolvedConfig.toSessionConfig())
             config = resolvedConfig
+            // A restarted stream starts without a face, so the face callback and the camera lock begin afresh
+            lastFacePresence = false
         }
         isPaused = false
         connectionMonitor.reset()
@@ -144,6 +153,7 @@ class StreamProcessor(
     /** Pauses the camera stream and prevents new frames from being processed. */
     suspend fun pause() {
         isPaused = true
+        resetCameraLock()
         camera.stop()
     }
 
@@ -171,6 +181,7 @@ class StreamProcessor(
      */
     fun stop() {
         isPaused = true
+        resetCameraLock()
         camera.stop()
 
         inferenceJob?.cancel()
@@ -204,6 +215,51 @@ class StreamProcessor(
      */
     suspend fun setConnectionUnstableCallback(callback: (() -> Unit)?) {
         mutex.withLock { onConnectionUnstable = callback }
+    }
+
+    /**
+     * Locks the camera's exposure and white balance once a face has been in view for the delay, and
+     * releases them when the face is lost so the camera can adapt before the next lock.
+     */
+    private fun updateCameraLock(facePresent: Boolean) {
+        if (facePresent) {
+            synchronized(cameraLockState) {
+                if (cameraLocked || cameraLockJob != null) return
+                cameraLockJob = scope.launch {
+                    delay(cameraLockDelayMs)
+                    lockCameraNow()
+                }
+            }
+        } else {
+            val wasLocked = synchronized(cameraLockState) {
+                cameraLockJob?.cancel()
+                cameraLockJob = null
+                val locked = cameraLocked
+                cameraLocked = false
+                locked
+            }
+            if (wasLocked) camera.setSettingsLocked(false)
+        }
+    }
+
+    private fun lockCameraNow() {
+        val shouldLock = synchronized(cameraLockState) {
+            cameraLockJob = null
+            if (cameraLocked) false else { cameraLocked = true; true }
+        }
+        if (shouldLock) camera.setSettingsLocked(true)
+    }
+
+    /**
+     * Forgets a pending or held lock without touching the camera: used when the camera stops, as
+     * a restarted camera starts without any lock.
+     */
+    private fun resetCameraLock() {
+        synchronized(cameraLockState) {
+            cameraLockJob?.cancel()
+            cameraLockJob = null
+            cameraLocked = false
+        }
     }
 
     /** Stops inference after reporting an unstable connection, once. */
@@ -243,6 +299,7 @@ class StreamProcessor(
         val callback = mutex.withLock {
             if (isFacePresent != lastFacePresence) {
                 lastFacePresence = isFacePresent
+                updateCameraLock(isFacePresent)
                 onFaceStateChanged
             } else {
                 null
