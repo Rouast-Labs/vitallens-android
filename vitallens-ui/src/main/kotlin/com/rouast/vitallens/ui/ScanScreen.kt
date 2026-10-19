@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
@@ -584,7 +585,8 @@ private fun ScanTopBar(state: ScanState, onCancel: () -> Unit, modifier: Modifie
                 contentDescription = null,
                 modifier = Modifier
                     .size(32.dp)
-                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White)
                     .clickable { uriHandler.openUri(SCAN_ROUAST_API_URL) },
             )
             Spacer(Modifier.weight(1f))
@@ -592,7 +594,7 @@ private fun ScanTopBar(state: ScanState, onCancel: () -> Unit, modifier: Modifie
                 Icon(Icons.Filled.Cancel, contentDescription = "Cancel", tint = Color.White)
             }
         }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
             ScanStatusBadge(state = state)
         }
     }

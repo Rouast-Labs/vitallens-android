@@ -33,6 +33,14 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * Whether [CameraSource.setSettingsLocked] locks the camera. Switched off: on a Samsung phone the
+ * first version showed a green colour cast and low confidence, probably because auto white
+ * balance was locked before it had converged. Re-enable only once the lock waits for convergence
+ * (CONTROL_AWB_STATE / CONTROL_AE_STATE) and has been validated on devices.
+ */
+private const val CAMERA_LOCK_ENABLED = false
+
 /** Frame hand-off buffer size between capture and whatever consumes [CameraSource.stream]. */
 private const val FRAME_CHANNEL_CAPACITY = 8
 
@@ -126,7 +134,13 @@ class CameraSource(private val context: Context) : CameraStreaming {
         cameraProvider = provider
     }
 
+    @OptIn(markerClass = [ExperimentalCamera2Interop::class])
     override fun stop() {
+        // Capture request options (such as the AE and AWB locks) stay on the camera after it is
+        // unbound, so a later session would start with them still set: clear them explicitly.
+        boundCamera?.let { camera ->
+            runCatching { Camera2CameraControl.from(camera.cameraControl).clearCaptureRequestOptions() }
+        }
         val provider = cameraProvider
         cameraProvider = null
         previewUseCase = null
@@ -147,6 +161,7 @@ class CameraSource(private val context: Context) : CameraStreaming {
      */
     @OptIn(markerClass = [ExperimentalCamera2Interop::class])
     override fun setSettingsLocked(locked: Boolean) {
+        if (!CAMERA_LOCK_ENABLED) return
         val camera = boundCamera ?: return
         runCatching {
             val info = Camera2CameraInfo.from(camera.cameraInfo)

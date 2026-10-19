@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rouast.vitallens.VitalLens
 import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.core.WaveformMode
@@ -571,7 +573,8 @@ private fun MonitorTopBar(state: MonitorState, onStop: () -> Unit, modifier: Mod
                 contentDescription = null,
                 modifier = Modifier
                     .size(32.dp)
-                    .background(Color.White, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White)
                     .clickable { uriHandler.openUri(MONITOR_ROUAST_API_URL) },
             )
             Spacer(Modifier.weight(1f))
@@ -579,7 +582,7 @@ private fun MonitorTopBar(state: MonitorState, onStop: () -> Unit, modifier: Mod
                 Icon(Icons.Filled.Cancel, contentDescription = "Stop", tint = Color.White)
             }
         }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
             MonitorStatusBadge(state = state)
         }
     }
@@ -686,7 +689,8 @@ private fun GroupedMetricsTile(
     ) {
         Text(
             pInfo?.shortName ?: primaryId,
-            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.Gray,
         )
@@ -694,7 +698,8 @@ private fun GroupedMetricsTile(
             if (isPrimaryReady && primaryValue != null) {
                 Text(
                     String.format(Locale.US, monitorVitalFormat(primaryId), primaryValue),
-                    style = MaterialTheme.typography.headlineMedium,
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -703,14 +708,15 @@ private fun GroupedMetricsTile(
             } else {
                 Text(
                     "--",
-                    style = MaterialTheme.typography.headlineMedium,
+                    fontSize = 28.sp,
+                    lineHeight = 32.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = Color.White.copy(alpha = 0.3f),
                 )
             }
             pInfo?.unit?.uppercase()?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(bottom = 6.dp))
+                Text(it, fontSize = 10.sp, lineHeight = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 5.dp))
             }
         }
         if (secondary1Id != null || secondary2Id != null) {
@@ -727,12 +733,13 @@ private fun GroupedMetricsTile(
 private fun SecondaryMetric(id: String, value: Double?, isReady: Boolean) {
     val meta = VitalInfoCache.getInfo(id)
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(meta?.shortName ?: id, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Text(meta?.shortName ?: id, fontSize = 11.sp, lineHeight = 14.sp, color = Color.Gray)
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             if (isReady && value != null) {
                 Text(
                     String.format(Locale.US, monitorVitalFormat(id), value),
-                    style = MaterialTheme.typography.labelMedium,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -740,14 +747,15 @@ private fun SecondaryMetric(id: String, value: Double?, isReady: Boolean) {
             } else {
                 Text(
                     "--",
-                    style = MaterialTheme.typography.labelMedium,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White.copy(alpha = 0.3f),
                 )
             }
             meta?.unit?.lowercase()?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text(it, fontSize = 9.sp, lineHeight = 14.sp, color = Color.Gray)
             }
         }
     }
