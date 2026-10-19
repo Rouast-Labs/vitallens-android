@@ -6,10 +6,13 @@ import com.rouast.vitallens.core.Session
 import com.rouast.vitallens.core.WaveformMode
 import com.rouast.vitallens.image.ImageProcessor
 import com.rouast.vitallens.inference.ImageOrientation
+import com.rouast.vitallens.inference.ConnectionMonitor
+import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.inference.InferenceContext
 import com.rouast.vitallens.inference.InferenceStrategy
 import com.rouast.vitallens.inference.InferenceUnit
 import com.rouast.vitallens.inference.Rect
+import com.rouast.vitallens.inference.VitalLensException
 import com.rouast.vitallens.inference.buffer.BufferManager
 import com.rouast.vitallens.inference.network.ModelConfig
 import com.rouast.vitallens.inference.toSessionConfig
@@ -86,6 +89,13 @@ class StreamProcessor(
     private var session: Session? = null
     private var lastFacePresence: Boolean = false
     private var onFaceStateChanged: ((Boolean) -> Unit)? = null
+    private var onSlowConnection: (() -> Unit)? = null
+    private var onConnectionUnstable: (() -> Unit)? = null
+    private val connectionMonitor = ConnectionMonitor()
+    private var unstableReported = false
+
+    /** Frames in a single request above which the stream is reset as unstable. */
+    internal var streamResetFrames: Int = ConnectionThresholds.STREAM_RESET_FRAMES
     private var lastProcessedTime: Double = -1.0
     private var streamGeneration: Int = 0
 
@@ -113,6 +123,8 @@ class StreamProcessor(
             config = resolvedConfig
         }
         isPaused = false
+        connectionMonitor.reset()
+        unstableReported = false
 
         val signalChannel = Channel<Unit>(Channel.CONFLATED)
         frameSignalChannel = signalChannel
@@ -174,6 +186,35 @@ class StreamProcessor(
     /** Sets a callback triggered immediately when face presence changes, or `null` to clear it. */
     suspend fun setFaceStateCallback(callback: ((Boolean) -> Unit)?) {
         mutex.withLock { onFaceStateChanged = callback }
+    }
+
+    /**
+     * Sets a callback triggered once when the connection is too slow for the current frame rate,
+     * or `null` to clear it. Only reported above the eco frame rate. The caller is expected to
+     * restart the stream at a lower frame rate.
+     */
+    suspend fun setSlowConnectionCallback(callback: (() -> Unit)?) {
+        mutex.withLock { onSlowConnection = callback }
+    }
+
+    /**
+     * Sets a callback triggered once when the connection is so unstable that the stream cannot
+     * continue, or `null` to clear it. This happens when too many frames queue up behind slow
+     * requests, or when requests keep failing. Inference stops until the stream is restarted.
+     */
+    suspend fun setConnectionUnstableCallback(callback: (() -> Unit)?) {
+        mutex.withLock { onConnectionUnstable = callback }
+    }
+
+    /** Stops inference after reporting an unstable connection, once. */
+    private suspend fun reportUnstableConnection() {
+        val callback = mutex.withLock {
+            if (unstableReported) return
+            unstableReported = true
+            onConnectionUnstable
+        }
+        bufferManager.reset()
+        callback?.invoke()
     }
 
     /**
@@ -247,6 +288,7 @@ class StreamProcessor(
         var consecutiveErrors = 0
 
         signals.collect {
+            if (mutex.withLock { unstableReported }) return@collect
             pollLoop@ while (currentCoroutineContext().isActive) {
                 val command = bufferManager.poll(InferenceMode.STREAM) ?: break@pollLoop
 
@@ -255,9 +297,14 @@ class StreamProcessor(
                 }
 
                 val window = bufferManager.execute(command) ?: break@pollLoop
+                if (window.size > streamResetFrames) {
+                    reportUnstableConnection()
+                    break@pollLoop
+                }
                 val currentState = bufferManager.getState()
                 val currentGeneration = mutex.withLock { streamGeneration }
                 val modelName = mutex.withLock { config?.modelName }
+                val requestStart = System.nanoTime()
 
                 try {
                     val outcome = strategy.infer(window, currentState, InferenceMode.STREAM, modelName)
@@ -267,6 +314,14 @@ class StreamProcessor(
                     }
 
                     consecutiveErrors = 0
+
+                    val fps = mutex.withLock { config?.fpsTarget }
+                    if (fps != null && fps > ConnectionThresholds.ECO_FPS) {
+                        val elapsedMs = (System.nanoTime() - requestStart) / 1_000_000.0
+                        if (connectionMonitor.record(elapsedMs, window.size) != null) {
+                            mutex.withLock { onSlowConnection }?.invoke()
+                        }
+                    }
                     bufferManager.updateState(outcome.newState)
 
                     val refined = mutex.withLock {
@@ -284,6 +339,13 @@ class StreamProcessor(
                     throw e
                 } catch (e: Exception) {
                     consecutiveErrors++
+
+                    // Requests that keep failing or timing out mean the connection is unusable
+                    if (consecutiveErrors >= 2 && e is VitalLensException.NetworkError) {
+                        reportUnstableConnection()
+                        break@pollLoop
+                    }
+
                     if (consecutiveErrors >= 3) {
                         bufferManager.reset()
                         mutex.withLock {

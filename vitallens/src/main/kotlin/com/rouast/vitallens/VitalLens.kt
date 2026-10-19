@@ -107,6 +107,31 @@ class VitalLens private constructor(
             scope.launch { streamProcessor?.setFaceStateCallback(value) }
         }
 
+    /**
+     * A closure triggered once when the connection is too slow for the current frame rate.
+     *
+     * Only reported above 15 fps. To react, stop the stream and start a new [VitalLens] client
+     * with a lower `overrideFps`.
+     */
+    var onSlowConnection: (() -> Unit)? = null
+        set(value) {
+            field = value
+            scope.launch { streamProcessor?.setSlowConnectionCallback(value) }
+        }
+
+    /**
+     * A closure triggered once when the connection is so unstable that the stream cannot continue.
+     *
+     * This happens when too many frames queue up behind slow requests, or when requests keep
+     * failing. Inference stops, so stop the stream and tell the user to try again on a better
+     * connection.
+     */
+    var onConnectionUnstable: (() -> Unit)? = null
+        set(value) {
+            field = value
+            scope.launch { streamProcessor?.setConnectionUnstableCallback(value) }
+        }
+
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onStop(owner: LifecycleOwner) = handleAppBackground()
         override fun onStart(owner: LifecycleOwner) = handleAppForeground()
@@ -150,6 +175,8 @@ class VitalLens private constructor(
         }
 
         processor.setFaceStateCallback(onFaceStateChanged)
+        processor.setSlowConnectionCallback(onSlowConnection)
+        processor.setConnectionUnstableCallback(onConnectionUnstable)
         preview?.let { camera?.showPreview(it) }
 
         return processor.start()

@@ -3,6 +3,7 @@ package com.rouast.vitallens.inference.network
 import com.rouast.vitallens.core.BufferConfig
 import com.rouast.vitallens.core.InferenceMode
 import com.rouast.vitallens.core.computeBufferConfig
+import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.inference.InferenceContext
 import com.rouast.vitallens.inference.InferenceOutcome
 import com.rouast.vitallens.inference.InferenceState
@@ -104,7 +105,12 @@ class ApiInference(
             .post(gzip(rawRgbBytes).toRequestBody("application/octet-stream".toMediaType()))
             .build()
 
-        return perform(request, VitalLensResultSerializer)
+        // A stream request that takes this long is of no use any more: newer frames queue behind it.
+        val streamClient = client.newBuilder()
+            .callTimeout(ConnectionThresholds.STREAM_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
+
+        return perform(request, VitalLensResultSerializer, streamClient)
     }
 
     /** Uploads a video file chunk to the file processing endpoint. */
@@ -234,9 +240,13 @@ class ApiInference(
         return this
     }
 
-    private suspend fun <T> perform(request: Request, serializer: KSerializer<T>): T {
+    private suspend fun <T> perform(
+        request: Request,
+        serializer: KSerializer<T>,
+        callClient: OkHttpClient = client,
+    ): T {
         try {
-            val response = client.newCall(request).await()
+            val response = callClient.newCall(request).await()
             val bodyString = response.body.string()
 
             when (response.code) {
