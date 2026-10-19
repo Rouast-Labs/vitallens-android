@@ -56,6 +56,7 @@ import com.rouast.vitallens.VitalLens
 import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.core.WaveformMode
 import com.rouast.vitallens.inference.model.VitalLensResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -328,6 +329,9 @@ private class MonitorController(
             try {
                 val stream = newClient.startStream(preview = view)
                 stream.collect { result -> if (token == sessionToken) updateUI(result) }
+            } catch (e: CancellationException) {
+                // The session was replaced or stopped on purpose (e.g. fallback to eco mode)
+                throw e
             } catch (e: Exception) {
                 // No user-visible error state for a stream startup failure — it just reverts
                 // silently to idle. Still logged so the failure (e.g. an invalid API key) is
