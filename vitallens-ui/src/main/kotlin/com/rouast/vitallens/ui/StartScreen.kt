@@ -44,7 +44,7 @@ private const val ROUAST_API_URL = "https://www.rouast.com/api/"
 /** One icon+text instructional guide shown on [StartScreen] ([GuideItem]'s content). */
 data class GuideInstruction(val icon: ImageVector, val text: String)
 
-private val DEFAULT_INSTRUCTION_1 = GuideInstruction(Icons.Filled.AccountCircle, "Center your face\nin the oval.")
+private val DEFAULT_INSTRUCTION_1 = GuideInstruction(Icons.Filled.AccountCircle, "Sit close, face\nin the oval.")
 private val DEFAULT_INSTRUCTION_2 = GuideInstruction(Icons.Filled.PauseCircleFilled, "Hold yourself and\ncamera still.")
 
 /**

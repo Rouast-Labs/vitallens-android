@@ -89,7 +89,7 @@ class ScanScreenTest {
             strikeCount = 0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Adjust position...", result.message)
+        assertEquals("Adjust your position.", result.message)
     }
 
     @Test
@@ -103,14 +103,14 @@ class ScanScreenTest {
             strikeCount = 0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Improve lighting...", result.message)
+        assertEquals("Low confidence. Use steady light, move closer, and hold still.", result.message)
     }
 
     @Test
     fun `recovering transitions back to tracking once conditions recover`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Adjust position...",
+            currentMessage = "Adjust your position.",
             goodFace = true,
             isLowSignal = false,
             elapsedInState = 2.0,
@@ -124,7 +124,7 @@ class ScanScreenTest {
     fun `recovering keeps prompting to adjust position while the face is still bad`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Adjust position...",
+            currentMessage = "Adjust your position.",
             goodFace = false,
             isLowSignal = false,
             elapsedInState = 2.0,
@@ -132,14 +132,14 @@ class ScanScreenTest {
             recoveryTimeout = 10.0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Adjust position...", result.message)
+        assertEquals("Adjust your position.", result.message)
     }
 
     @Test
     fun `recovering prompts to improve lighting when only the signal is low`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Improve lighting...",
+            currentMessage = "Low confidence. Use steady light, move closer, and hold still.",
             goodFace = true,
             isLowSignal = true,
             elapsedInState = 2.0,
@@ -147,14 +147,14 @@ class ScanScreenTest {
             recoveryTimeout = 10.0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Improve lighting...", result.message)
+        assertEquals("Low confidence. Use steady light, move closer, and hold still.", result.message)
     }
 
     @Test
     fun `recovering escalates to a retry via searching when the timeout elapses with strikes to spare`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Adjust position...",
+            currentMessage = "Adjust your position.",
             goodFace = false,
             isLowSignal = false,
             elapsedInState = 10.0,
@@ -170,7 +170,7 @@ class ScanScreenTest {
     fun `recovering escalates to a hard issue once strikes are exhausted`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Adjust position...",
+            currentMessage = "Adjust your position.",
             goodFace = false,
             isLowSignal = false,
             elapsedInState = 10.0,

@@ -90,3 +90,8 @@ To cut a new release:
 The release workflow requires manual approval (via the `maven-central` GitHub Environment)
 before publishing, and needs `SONATYPE_USERNAME`/`SONATYPE_PASSWORD` plus a GPG signing key
 (`GPG_PRIVATE_KEY`/`GPG_PASSPHRASE`/`GPG_KEY_ID`) configured as environment secrets.
+
+
+## User-facing wording
+
+The on-screen feedback messages (Start screen guide, status and issue messages in the Scan and Monitor views) are kept mostly consistent across the JS, iOS and Android SDKs, and match the guidance on the [Accuracy & Guidelines](https://docs.rouast.com/guides/accuracy/) page. When you change any of them, update the other SDKs too (and their tests), or at least keep the wording close.

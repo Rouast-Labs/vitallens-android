@@ -94,8 +94,8 @@ internal fun resolveScanTransition(
     }
 
     ScanState.TRACKING -> when {
-        !goodFace -> ScanTransitionResult(ScanState.RECOVERING, "Adjust position...", strikeCount)
-        isLowSignal -> ScanTransitionResult(ScanState.RECOVERING, "Improve lighting...", strikeCount)
+        !goodFace -> ScanTransitionResult(ScanState.RECOVERING, "Adjust your position.", strikeCount)
+        isLowSignal -> ScanTransitionResult(ScanState.RECOVERING, "Low confidence. Use steady light, move closer, and hold still.", strikeCount)
         else -> ScanTransitionResult(ScanState.TRACKING, currentMessage, strikeCount)
     }
 
@@ -103,7 +103,7 @@ internal fun resolveScanTransition(
         goodFace && !isLowSignal -> ScanTransitionResult(ScanState.TRACKING, "Scanning...", strikeCount)
         elapsedInState >= recoveryTimeout -> resolveIssueEscalation(strikeCount, "Could not recover conditions.")
         else -> {
-            val message = if (!goodFace) "Adjust position..." else "Improve lighting..."
+            val message = if (!goodFace) "Adjust your position." else "Low confidence. Use steady light, move closer, and hold still."
             ScanTransitionResult(ScanState.RECOVERING, message, strikeCount)
         }
     }

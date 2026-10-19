@@ -114,7 +114,7 @@ class StartScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("Center your face\nin the oval.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sit close, face\nin the oval.").assertIsDisplayed()
         composeTestRule.onNodeWithText("Hold yourself and\ncamera still.").assertIsDisplayed()
         composeTestRule.onNodeWithText("Ensure bright,\nsteady lighting.").assertIsDisplayed()
     }

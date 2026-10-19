@@ -84,7 +84,7 @@ internal fun resolveMonitorFeedback(
     hasEnoughData: Boolean,
 ): Pair<MonitorState, String> = when {
     !(hasConfidentHr || hasConfidentRr || hasConfidentHrv) ->
-        MonitorState.ISSUE to "Low confidence. Ensure you are well lit and hold still."
+        MonitorState.ISSUE to "Low confidence. Use steady light, move closer, and hold still."
     showWaveforms && !hasEnoughData -> MonitorState.WARMING_UP to ""
     else -> MonitorState.TRACKING to "Tracking vitals"
 }
@@ -195,7 +195,7 @@ private class MonitorController(
     fun startProcessing() {
         isProcessing = true
         monitorState = MonitorState.SEARCHING
-        feedbackMessage = "Face the camera, ensure good lighting and hold still."
+        feedbackMessage = "Face the camera and hold still."
     }
 
     fun stopProcessing() {
