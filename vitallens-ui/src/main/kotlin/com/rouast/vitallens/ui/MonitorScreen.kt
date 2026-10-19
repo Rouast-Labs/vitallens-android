@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -523,6 +524,14 @@ fun MonitorScreen(
             context, apiKey, proxyUrl, method, showWaveforms, initialMode,
             bufferOffsetSeconds, windowSizeSeconds, minDisplayDurationSeconds, baseUrl, scope,
         )
+    }
+
+    // A session needs no touches, so the screen would dim after the inactivity timeout
+    val view = LocalView.current
+    val sessionActive = controller.isProcessing
+    DisposableEffect(sessionActive) {
+        view.keepScreenOn = sessionActive
+        onDispose { view.keepScreenOn = false }
     }
 
     DisposableEffect(Unit) {

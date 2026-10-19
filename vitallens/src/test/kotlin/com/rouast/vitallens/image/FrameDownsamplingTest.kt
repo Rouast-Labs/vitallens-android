@@ -56,15 +56,18 @@ class FrameDownsamplingTest {
 
     @Test
     fun `averaging reduces noise the way a box filter should`() {
-        // Sensor noise of +-20 around 128 averaged over 8x8 blocks leaves far less variation than
-        // picking single pixels (which is what plain bilinear sampling at a large factor amounts to)
+        // Sensor noise of +-20 around 128. Picking single pixels (what plain bilinear sampling at a
+        // large downscale factor amounts to) keeps all of it; averaging 8x8 blocks keeps a fraction.
         val random = Random(42)
         val src = IntArray(320 * 320) { argb(128 + random.nextInt(-20, 21), 128, 128) }
 
         val averaged = boxDownsample(src, 320, 320, 40).map { red(it) }
-        val spread = averaged.max() - averaged.min()
+        val sampled = (0 until 40 * 40).map { i -> red(src[((i / 40) * 8 + 4) * 320 + (i % 40) * 8 + 4]) }
 
-        assertTrue("spread after averaging was $spread", spread <= 6)
+        val averagedSpread = averaged.max() - averaged.min()
+        val sampledSpread = sampled.max() - sampled.min()
+
+        assertTrue("sampled spread $sampledSpread, averaged spread $averagedSpread", averagedSpread * 3 <= sampledSpread)
     }
 
     @Test

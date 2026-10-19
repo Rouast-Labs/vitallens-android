@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -507,6 +508,14 @@ fun ScanScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val controller = remember { ScanController(apiKey, proxyUrl, method, mode, baseUrl, scope, onComplete) }
+
+    // A session needs no touches, so the screen would dim after the inactivity timeout
+    val view = LocalView.current
+    val sessionActive = controller.scanState != ScanState.IDLE && controller.scanState != ScanState.COMPLETED
+    DisposableEffect(sessionActive) {
+        view.keepScreenOn = sessionActive
+        onDispose { view.keepScreenOn = false }
+    }
 
     DisposableEffect(Unit) {
         onDispose { controller.client?.stopStream() }

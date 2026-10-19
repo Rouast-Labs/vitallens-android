@@ -1,7 +1,6 @@
 package com.rouast.vitallens.image
 
 import android.graphics.Bitmap
-import android.graphics.Matrix
 import com.rouast.vitallens.mappedToRaw
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.Rect
@@ -23,6 +22,70 @@ internal fun computeCropRect(bitmapWidth: Int, bitmapHeight: Int, roi: Rect): Cr
     }
 
     return CropRect(x, y, width, height)
+}
+
+/**
+ * Scales an ARGB image of [srcWidth]x[srcHeight] down to [target]x[target] by averaging every block
+ * of source pixels (box / area filter).
+ *
+ * Averaging over the whole block is what lifts the pulse signal above sensor noise. Plain bilinear
+ * sampling at a large downscale factor (e.g. ~300 px to 40 px) only reads about four source pixels per
+ * output pixel and throws that averaging away. This matches the Python implementation and iOS
+ * (vImage), and the model's training data more closely. The output is opaque.
+ *
+ * A source smaller than the target is repeated rather than left empty.
+ */
+internal fun boxDownsample(pixels: IntArray, srcWidth: Int, srcHeight: Int, target: Int): IntArray {
+    val out = IntArray(target * target)
+    for (oy in 0 until target) {
+        val y0 = oy * srcHeight / target
+        val y1 = maxOf(y0 + 1, (oy + 1) * srcHeight / target)
+        for (ox in 0 until target) {
+            val x0 = ox * srcWidth / target
+            val x1 = maxOf(x0 + 1, (ox + 1) * srcWidth / target)
+            var r = 0L
+            var g = 0L
+            var b = 0L
+            for (y in y0 until y1) {
+                val row = y * srcWidth
+                for (x in x0 until x1) {
+                    val p = pixels[row + x]
+                    r += (p shr 16) and 0xFF
+                    g += (p shr 8) and 0xFF
+                    b += p and 0xFF
+                }
+            }
+            val n = ((y1 - y0) * (x1 - x0)).toLong()
+            out[oy * target + ox] = (0xFF shl 24) or
+                (((r + n / 2) / n).toInt() shl 16) or
+                (((g + n / 2) / n).toInt() shl 8) or
+                ((b + n / 2) / n).toInt()
+        }
+    }
+    return out
+}
+
+/**
+ * Rotates a [size]x[size] image clockwise by [degrees] (a multiple of 90), then mirrors it
+ * horizontally if [mirrored]. Exact pixel moves, no resampling.
+ */
+internal fun rotateAndMirror(pixels: IntArray, size: Int, degrees: Int, mirrored: Boolean): IntArray {
+    val turns = ((degrees / 90) % 4 + 4) % 4
+    val out = IntArray(size * size)
+    for (y in 0 until size) {
+        for (x in 0 until size) {
+            var nx = x
+            var ny = y
+            when (turns) {
+                1 -> { nx = size - 1 - y; ny = x }
+                2 -> { nx = size - 1 - x; ny = size - 1 - y }
+                3 -> { nx = y; ny = size - 1 - x }
+            }
+            if (mirrored) nx = size - 1 - nx
+            out[ny * size + nx] = pixels[y * size + x]
+        }
+    }
+    return out
 }
 
 /**
@@ -57,19 +120,12 @@ object ImageProcessor {
         val rawRoi = roi.mappedToRaw(orientation, isMirrored)
         val crop = computeCropRect(bitmap.width, bitmap.height, rawRoi)
 
-        val matrix = Matrix().apply {
-            postScale(targetSize.toFloat() / crop.width, targetSize.toFloat() / crop.height)
-            postRotate(orientationToRotationDegrees(orientation).toFloat(), targetSize / 2f, targetSize / 2f)
-            if (isMirrored) postScale(-1f, 1f, targetSize / 2f, targetSize / 2f)
-        }
-
-        // TODO: createBitmap with a scaling matrix (filter=true) is plain bilinear without
-        //   antialiasing - at large downscale factors (e.g. ~300px -> 40px) it samples ~4 source px per
-        //   output px, discarding the spatial averaging that lifts the pulse above sensor noise, and
-        //   mismatching training (ffmpeg bicubic) / Python (box) / iOS (vImage). Use box/area averaging
-        //   over the cropped pixels instead (or a shared box-downsample in vitallens-core).
-        //   Verify first: same recording via Python vs Android, compare confidence/SNR.
-        return Bitmap.createBitmap(bitmap, crop.x, crop.y, crop.width, crop.height, matrix, true)
+        // Scale in the raw orientation by averaging, then rotate and mirror: the same order as iOS
+        val region = IntArray(crop.width * crop.height)
+        bitmap.getPixels(region, 0, crop.width, crop.x, crop.y, crop.width, crop.height)
+        val scaled = boxDownsample(region, crop.width, crop.height, targetSize)
+        val oriented = rotateAndMirror(scaled, targetSize, orientationToRotationDegrees(orientation), isMirrored)
+        return Bitmap.createBitmap(oriented, targetSize, targetSize, Bitmap.Config.ARGB_8888)
     }
 
     /** Flattens [bitmap] to packed RGB bytes (no alpha channel), ready for network transmission. */
