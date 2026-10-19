@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -91,7 +92,8 @@ fun ResultScreen(
                     contentDescription = null,
                     modifier = Modifier
                         .size(32.dp)
-                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
                         .clickable { uriHandler.openUri(ROUAST_API_URL) },
                 )
                 Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
