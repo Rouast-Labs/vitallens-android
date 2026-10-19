@@ -12,5 +12,5 @@ plugins {
 // own `version`, matching how vitallens-ios/-python/-core each version their own package
 // independently rather than syncing to one another's number.
 allprojects {
-    version = "0.1.0"
+    version = "0.2.0"
 }
