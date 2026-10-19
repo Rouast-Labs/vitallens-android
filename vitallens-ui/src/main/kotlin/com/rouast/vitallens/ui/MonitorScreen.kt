@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rouast.vitallens.VitalLens
+import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.core.WaveformMode
 import com.rouast.vitallens.inference.model.VitalLensResult
 import kotlinx.coroutines.CoroutineScope
@@ -84,7 +85,7 @@ internal fun resolveMonitorFeedback(
     hasEnoughData: Boolean,
 ): Pair<MonitorState, String> = when {
     !(hasConfidentHr || hasConfidentRr || hasConfidentHrv) ->
-        MonitorState.ISSUE to "Low confidence. Use steady light, move closer, and hold still."
+        MonitorState.ISSUE to LOW_CONFIDENCE_MESSAGE
     showWaveforms && !hasEnoughData -> MonitorState.WARMING_UP to ""
     else -> MonitorState.TRACKING to "Tracking vitals"
 }
@@ -127,6 +128,13 @@ private class MonitorController(
         private set
 
     private var isFaceCurrentlyDetected = false
+
+    private var previewView: PreviewView? = null
+    private var sessionToken = 0
+    private var sessionJob: kotlinx.coroutines.Job? = null
+    private var autoFallbackDone = false
+    private var noticeUntilMs = 0L
+    private var lastResultAtMs = System.currentTimeMillis()
 
     var hrValue by mutableStateOf<Double?>(null)
         private set
@@ -193,12 +201,15 @@ private class MonitorController(
         }
 
     fun startProcessing() {
+        autoFallbackDone = false
         isProcessing = true
         monitorState = MonitorState.SEARCHING
         feedbackMessage = "Face the camera and hold still."
     }
 
     fun stopProcessing() {
+        sessionToken++
+        sessionJob?.cancel()
         isProcessing = false
         monitorState = MonitorState.IDLE
         feedbackMessage = ""
@@ -227,8 +238,70 @@ private class MonitorController(
         isFaceCurrentlyDetected = false
     }
 
+    /** Sets the feedback message, unless a notice is being shown. */
+    private fun setFeedback(message: String) {
+        if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force = false)) feedbackMessage = message
+    }
+
+    /** Stops the monitor because the connection is too unstable to continue. */
+    private fun handleConnectionUnstable() {
+        if (!isProcessing || monitorState == MonitorState.IDLE) return
+        client?.stopStream()
+        monitorState = MonitorState.ISSUE
+        feedbackMessage = ConnectionThresholds.UNSTABLE_MESSAGE
+        scope.launch {
+            delay(3_000)
+            if (isProcessing && monitorState == MonitorState.ISSUE && feedbackMessage == ConnectionThresholds.UNSTABLE_MESSAGE) {
+                stopProcessing()
+            }
+        }
+    }
+
+    /** Stops the monitor when results stop arriving while a face is in view, which happens on connections that are far too slow. */
+    private suspend fun watchForStall(token: Int) {
+        while (token == sessionToken) {
+            delay(1_000)
+            if (token != sessionToken) return
+            val waiting = isFaceCurrentlyDetected && monitorState != MonitorState.ISSUE
+            if (isStalled(waiting, System.currentTimeMillis() - lastResultAtMs)) {
+                handleConnectionUnstable()
+                return
+            }
+        }
+    }
+
+    /**
+     * Falls back to eco mode because the connection is too slow for standard mode. Measurements
+     * start over, as frame rates cannot be mixed.
+     */
+    private fun fallBackToEco() {
+        if (autoFallbackDone || currentMode != VitalLensMode.STANDARD || !isProcessing) return
+        val view = previewView ?: return
+        autoFallbackDone = true
+        currentMode = VitalLensMode.ECO
+
+        sessionToken++
+        sessionJob?.cancel()
+        client?.stopStream()
+        client = null
+        playbackJob?.cancel()
+        clearMeasurements()
+        isFaceCurrentlyDetected = false
+
+        monitorState = MonitorState.SEARCHING
+        feedbackMessage = SLOW_CONNECTION_MESSAGE
+        noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
+
+        scope.launch {
+            // Give the stopped camera session time to shut down
+            delay(300)
+            startSession(view)
+        }
+    }
+
     fun startSession(view: PreviewView) {
         if (client != null || !isProcessing) return
+        previewView = view
 
         val newClient = VitalLens(
             context = context,
@@ -240,16 +313,21 @@ private class MonitorController(
             strategy = resolveCustomStrategy(apiKey, proxyUrl, method, currentMode.fps, baseUrl),
         )
         newClient.onFaceStateChanged = { isPresent -> onFaceStateChanged(isPresent) }
+        val token = ++sessionToken
+        lastResultAtMs = System.currentTimeMillis()
+        newClient.onSlowConnection = { scope.launch { if (token == sessionToken) fallBackToEco() } }
+        newClient.onConnectionUnstable = { scope.launch { if (token == sessionToken) handleConnectionUnstable() } }
         client = newClient
 
         if (bufferOffsetSeconds > 0) {
             playbackJob = scope.launch { runPlaybackLoop() }
         }
 
-        scope.launch {
+        scope.launch { watchForStall(token) }
+        sessionJob = scope.launch {
             try {
                 val stream = newClient.startStream(preview = view)
-                stream.collect { result -> updateUI(result) }
+                stream.collect { result -> if (token == sessionToken) updateUI(result) }
             } catch (e: Exception) {
                 // No user-visible error state for a stream startup failure — it just reverts
                 // silently to idle. Still logged so the failure (e.g. an invalid API key) is
@@ -269,18 +347,20 @@ private class MonitorController(
     private fun onFaceStateChanged(isPresent: Boolean) {
         if (!isProcessing) return
         isFaceCurrentlyDetected = isPresent
+        if (isPresent) lastResultAtMs = System.currentTimeMillis()
         if (!isPresent) {
             monitorState = MonitorState.SEARCHING
-            feedbackMessage = "Face the camera and hold still."
+            setFeedback("Face the camera and hold still.")
             client?.resetStream()
             clearMeasurements()
         } else if (monitorState == MonitorState.SEARCHING || monitorState == MonitorState.IDLE) {
             monitorState = MonitorState.SEARCHING
-            feedbackMessage = "Face detected, analyzing..."
+            setFeedback("Face detected, analyzing...")
         }
     }
 
     private fun updateUI(result: VitalLensResult) {
+        lastResultAtMs = System.currentTimeMillis()
         if (!isProcessing || !isFaceCurrentlyDetected) return
 
         receivedVitals = receivedVitals + result.vitals.keys
@@ -290,7 +370,7 @@ private class MonitorController(
 
         if (currentFaceConf < FACE_CONF_THRESHOLD) {
             monitorState = MonitorState.ISSUE
-            feedbackMessage = "Face not clear. Hold still."
+            setFeedback("Face not clear. Hold still.")
             return
         }
 
@@ -310,7 +390,7 @@ private class MonitorController(
             hasEnoughData = hasEnoughData,
         )
         monitorState = newState
-        feedbackMessage = newMessage
+        setFeedback(newMessage)
     }
 
     private fun queueWaveformData(result: VitalLensResult) {
@@ -396,7 +476,7 @@ fun MonitorScreen(
     proxyUrl: HttpUrl? = null,
     method: String = "vitallens",
     showWaveforms: Boolean = true,
-    initialMode: VitalLensMode = VitalLensMode.ECO,
+    initialMode: VitalLensMode = DEFAULT_VITALLENS_MODE,
     bufferOffsetSeconds: Double = 0.15,
     windowSizeSeconds: Double = 8.0,
     minDisplayDurationSeconds: Double = 6.0,

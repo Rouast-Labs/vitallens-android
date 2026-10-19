@@ -18,3 +18,6 @@ enum class VitalLensMode {
             ECO -> 15.0
         }
 }
+
+/** The mode the screens start in. On a connection too slow for it, they fall back to [VitalLensMode.ECO]. */
+internal val DEFAULT_VITALLENS_MODE: VitalLensMode = VitalLensMode.STANDARD

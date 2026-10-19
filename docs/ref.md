@@ -100,6 +100,29 @@ client.onFaceStateChanged = { isPresent ->
 }
 ```
 
+### `onSlowConnection`
+
+A closure triggered once when the connection is too slow for the current frame rate, so that requests queue up. It is only reported when running above 15 FPS. To react, stop the stream and start a new client with a lower `overrideFps`. The built-in screens do this automatically.
+
+```kotlin
+client.onSlowConnection = {
+    // Restart with a lower frame rate
+    client.stopStream()
+    client = VitalLens(context, apiKey = "YOUR_KEY", overrideFps = 15.0)
+}
+```
+
+### `onConnectionUnstable`
+
+A closure triggered once when the connection is too unstable for the stream to continue, even at 15 FPS: too many frames queue up behind slow requests, or requests keep failing or time out. Inference stops, so stop the stream and ask the user to try again on a better connection. The built-in screens stop and show a message.
+
+```kotlin
+client.onConnectionUnstable = {
+    client.stopStream()
+    println("Connection unstable. Please try again on a better connection.")
+}
+```
+
 ---
 
 ## Methods

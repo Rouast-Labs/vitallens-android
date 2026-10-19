@@ -21,7 +21,7 @@ A guided flow that handles a full measurement cycle. It instructs the user to po
 ScanScreen(
     apiKey = "YOUR_KEY",
     method = "vitallens",
-    mode = VitalLensMode.ECO,
+    mode = VitalLensMode.STANDARD,
     onComplete = { result ->
         result.heartRate?.value?.let { hr ->
             println("Final Heart Rate: $hr bpm")
@@ -38,7 +38,7 @@ ScanScreen(
 | `apiKey` | `String?` | Your API Key. Required if `proxyUrl` is not set. |
 | `proxyUrl` | `HttpUrl?` | URL to your backend proxy. |
 | `method` | `String` | Model version (e.g., `"vitallens"`, `"vitallens-2.0"`). Default is `"vitallens"`. |
-| `mode` | `VitalLensMode` | `ECO` (15 FPS, default) or `STANDARD` (30 FPS). |
+| `mode` | `VitalLensMode` | `STANDARD` (30 FPS, default) or `ECO` (15 FPS). Falls back to `ECO` once if the connection is too slow for `STANDARD`. |
 | `baseUrl` | `HttpUrl?` | Overrides the API host (e.g. for a staging/dev environment). Rarely needed — see [Advanced Use](advanced.md). |
 
 ---
@@ -62,7 +62,7 @@ MonitorScreen(
 | `proxyUrl` | `HttpUrl?` | URL to your backend proxy. |
 | `method` | `String` | Model version. Default is `"vitallens"`. |
 | `showWaveforms` | `Boolean` | Whether to render the real-time waveform charts. Default is `true`. |
-| `initialMode` | `VitalLensMode` | Initial FPS mode `ECO` or `STANDARD`. Default is `ECO`. |
+| `initialMode` | `VitalLensMode` | Initial FPS mode `STANDARD` or `ECO`. Default is `STANDARD`. Falls back to `ECO` once if the connection is too slow for `STANDARD`. |
 | `bufferOffsetSeconds` | `Double` | Delay in seconds for smooth chart rendering. Default is `0.15`. |
 | `windowSizeSeconds` | `Double` | Duration of data to show in the waveform charts. Default is `8.0`. |
 | `minDisplayDurationSeconds` | `Double` | Minimum data required before displaying values. Default is `6.0`. |

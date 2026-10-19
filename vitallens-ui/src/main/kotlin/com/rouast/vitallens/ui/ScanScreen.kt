@@ -46,8 +46,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rouast.vitallens.VitalLens
+import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.inference.model.VitalLensResult
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
@@ -95,7 +97,7 @@ internal fun resolveScanTransition(
 
     ScanState.TRACKING -> when {
         !goodFace -> ScanTransitionResult(ScanState.RECOVERING, "Adjust your position.", strikeCount)
-        isLowSignal -> ScanTransitionResult(ScanState.RECOVERING, "Low confidence. Use steady light, move closer, and hold still.", strikeCount)
+        isLowSignal -> ScanTransitionResult(ScanState.RECOVERING, LOW_CONFIDENCE_MESSAGE, strikeCount)
         else -> ScanTransitionResult(ScanState.TRACKING, currentMessage, strikeCount)
     }
 
@@ -103,7 +105,7 @@ internal fun resolveScanTransition(
         goodFace && !isLowSignal -> ScanTransitionResult(ScanState.TRACKING, "Scanning...", strikeCount)
         elapsedInState >= recoveryTimeout -> resolveIssueEscalation(strikeCount, "Could not recover conditions.")
         else -> {
-            val message = if (!goodFace) "Adjust your position." else "Low confidence. Use steady light, move closer, and hold still."
+            val message = if (!goodFace) "Adjust your position." else LOW_CONFIDENCE_MESSAGE
             ScanTransitionResult(ScanState.RECOVERING, message, strikeCount)
         }
     }
@@ -153,6 +155,14 @@ private class ScanController(
     var client: VitalLens? = null
         private set
 
+    private var previewView: PreviewView? = null
+    private var appContext: android.content.Context? = null
+    private var sessionToken = 0
+    private var sessionJob: Job? = null
+    private var autoFallbackDone = false
+    private var noticeUntilMs = 0L
+    private var lastResultAtMs = System.currentTimeMillis()
+
     private var accumulatedScanTime = 0.0
     private var lastFrameTimeMs: Long? = null
     private var stateStartTimeMs: Long = System.currentTimeMillis()
@@ -163,6 +173,7 @@ private class ScanController(
     private var totalFramesProcessed = 0
 
     fun startProcessing() {
+        autoFallbackDone = false
         scanState = ScanState.SEARCHING
         statusMessage = "Position your face in the oval"
         progress = 0.0
@@ -177,6 +188,8 @@ private class ScanController(
     }
 
     fun resetToIdle() {
+        sessionToken++
+        sessionJob?.cancel()
         client?.stopStream()
         client = null
         scanState = ScanState.IDLE
@@ -193,7 +206,7 @@ private class ScanController(
 
     private fun transition(newState: ScanState, message: String) {
         scanState = newState
-        statusMessage = message
+        setStatus(message, force = newState == ScanState.ISSUE)
         stateStartTimeMs = System.currentTimeMillis()
 
         if (newState == ScanState.ISSUE) {
@@ -202,6 +215,70 @@ private class ScanController(
                 delay(2_000)
                 if (scanState == ScanState.ISSUE) resetToIdle()
             }
+        }
+    }
+
+    /** Sets the status message, unless a notice is being shown. Issues always show. */
+    private fun setStatus(message: String, force: Boolean = false) {
+        if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force)) statusMessage = message
+    }
+
+    /** Stops the scan because the connection is too unstable to continue. */
+    private fun handleConnectionUnstable() {
+        if (scanState == ScanState.IDLE || scanState == ScanState.COMPLETED || scanState == ScanState.ISSUE) return
+        transition(ScanState.ISSUE, ConnectionThresholds.UNSTABLE_MESSAGE)
+    }
+
+    /** Stops the scan when results stop arriving, which happens on connections that are far too slow. */
+    private suspend fun watchForStall(token: Int) {
+        while (token == sessionToken) {
+            delay(1_000)
+            if (token != sessionToken) return
+            val waiting = scanState == ScanState.WARMING_UP ||
+                scanState == ScanState.TRACKING ||
+                scanState == ScanState.RECOVERING
+            if (isStalled(waiting, System.currentTimeMillis() - lastResultAtMs)) {
+                handleConnectionUnstable()
+                return
+            }
+        }
+    }
+
+    /**
+     * Falls back to eco mode because the connection is too slow for standard mode. The scan starts
+     * over, as frame rates cannot be mixed.
+     */
+    private fun fallBackToEco() {
+        if (autoFallbackDone || currentMode != VitalLensMode.STANDARD) return
+        if (scanState == ScanState.IDLE || scanState == ScanState.COMPLETED || scanState == ScanState.ISSUE) return
+        val view = previewView ?: return
+        val context = appContext ?: return
+        autoFallbackDone = true
+        currentMode = VitalLensMode.ECO
+
+        sessionToken++
+        sessionJob?.cancel()
+        client?.stopStream()
+        client = null
+
+        progress = 0.0
+        accumulatedScanTime = 0.0
+        lastFrameTimeMs = null
+        strikeCount = 0
+        ppgConfHistory.clear()
+        respConfHistory.clear()
+        faceConfHistory.clear()
+        totalFramesProcessed = 0
+
+        scanState = ScanState.SEARCHING
+        stateStartTimeMs = System.currentTimeMillis()
+        statusMessage = SLOW_CONNECTION_MESSAGE
+        noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
+
+        scope.launch {
+            // Give the stopped camera session time to shut down
+            delay(300)
+            startSession(context, view)
         }
     }
 
@@ -218,7 +295,7 @@ private class ScanController(
         when {
             result.state == ScanState.SEARCHING && scanState != ScanState.SEARCHING -> {
                 scanState = ScanState.SEARCHING
-                statusMessage = result.message
+                setStatus(result.message)
                 progress = 0.0
                 accumulatedScanTime = 0.0
                 stateStartTimeMs = System.currentTimeMillis()
@@ -230,12 +307,14 @@ private class ScanController(
             }
             result.state == ScanState.ISSUE -> transition(ScanState.ISSUE, result.message)
             result.state != scanState -> transition(result.state, result.message)
-            result.message != statusMessage -> statusMessage = result.message
+            result.message != statusMessage -> setStatus(result.message)
         }
     }
 
     fun startSession(context: android.content.Context, view: PreviewView) {
         if (client != null) return
+        previewView = view
+        appContext = context
 
         if (apiKey == null && proxyUrl == null) {
             transition(ScanState.ISSUE, "Error: Missing API Key or Proxy URL")
@@ -251,12 +330,17 @@ private class ScanController(
             strategy = resolveCustomStrategy(apiKey, proxyUrl, method, currentMode.fps, baseUrl),
         )
         newClient.onFaceStateChanged = { isPresent -> onFaceStateChanged(isPresent) }
+        val token = ++sessionToken
+        lastResultAtMs = System.currentTimeMillis()
+        newClient.onSlowConnection = { scope.launch { if (token == sessionToken) fallBackToEco() } }
+        newClient.onConnectionUnstable = { scope.launch { if (token == sessionToken) handleConnectionUnstable() } }
         client = newClient
 
-        scope.launch {
+        scope.launch { watchForStall(token) }
+        sessionJob = scope.launch {
             try {
                 val stream = newClient.startStream(preview = view)
-                stream.collect { result -> updateUI(result) }
+                stream.collect { result -> if (token == sessionToken) updateUI(result) }
             } catch (e: Exception) {
                 transition(ScanState.ISSUE, "Error: ${e.message}")
             }
@@ -269,6 +353,7 @@ private class ScanController(
     }
 
     private fun updateUI(result: VitalLensResult) {
+        lastResultAtMs = System.currentTimeMillis()
         val framesInThisUpdate = result.sampleCount ?: result.time.size
         totalFramesProcessed += framesInThisUpdate
 
@@ -387,7 +472,7 @@ fun ScanScreen(
     apiKey: String? = null,
     proxyUrl: HttpUrl? = null,
     method: String = "vitallens",
-    mode: VitalLensMode = VitalLensMode.ECO,
+    mode: VitalLensMode = DEFAULT_VITALLENS_MODE,
     baseUrl: HttpUrl? = null,
 ) {
     val context = LocalContext.current
