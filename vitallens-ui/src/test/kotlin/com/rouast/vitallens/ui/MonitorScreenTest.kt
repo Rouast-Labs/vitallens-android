@@ -16,7 +16,7 @@ class MonitorScreenTest {
             hasEnoughData = true,
         )
         assertEquals(MonitorState.ISSUE, state)
-        assertEquals("Low confidence. Use steady light, move closer, and hold still.", message)
+        assertEquals("Low confidence.\nUse steady light, move closer, and hold still.", message)
     }
 
     @Test

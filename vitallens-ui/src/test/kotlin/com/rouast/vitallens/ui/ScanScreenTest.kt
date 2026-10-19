@@ -103,7 +103,7 @@ class ScanScreenTest {
             strikeCount = 0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Low confidence. Use steady light, move closer, and hold still.", result.message)
+        assertEquals("Low confidence.\nUse steady light, move closer, and hold still.", result.message)
     }
 
     @Test
@@ -139,7 +139,7 @@ class ScanScreenTest {
     fun `recovering prompts to improve lighting when only the signal is low`() {
         val result = resolveScanTransition(
             currentState = ScanState.RECOVERING,
-            currentMessage = "Low confidence. Use steady light, move closer, and hold still.",
+            currentMessage = "Low confidence.\nUse steady light, move closer, and hold still.",
             goodFace = true,
             isLowSignal = true,
             elapsedInState = 2.0,
@@ -147,7 +147,7 @@ class ScanScreenTest {
             recoveryTimeout = 10.0,
         )
         assertEquals(ScanState.RECOVERING, result.state)
-        assertEquals("Low confidence. Use steady light, move closer, and hold still.", result.message)
+        assertEquals("Low confidence.\nUse steady light, move closer, and hold still.", result.message)
     }
 
     @Test
