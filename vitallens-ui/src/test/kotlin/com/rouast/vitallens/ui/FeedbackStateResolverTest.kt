@@ -65,3 +65,32 @@ class FeedbackStateResolverTest {
         assertFalse(isLowSignal(avgPpgConf = 0.9, avgFaceConf = 0.9))
     }
 }
+
+class HrvGatingTest {
+
+    @Test
+    fun `shows HRV when both HRV and heart rate are confident`() {
+        assertTrue(isHrvShown(hrvConf = 0.85, hrConf = 0.9, hrvThreshold = 0.8, hrThreshold = 0.8))
+    }
+
+    @Test
+    fun `hides HRV when heart rate is not confident, even if HRV is`() {
+        assertFalse(isHrvShown(hrvConf = 0.95, hrConf = 0.79, hrvThreshold = 0.8, hrThreshold = 0.8))
+    }
+
+    @Test
+    fun `hides HRV when HRV itself is not confident`() {
+        assertFalse(isHrvShown(hrvConf = 0.79, hrConf = 0.95, hrvThreshold = 0.8, hrThreshold = 0.8))
+    }
+
+    @Test
+    fun `the thresholds are inclusive`() {
+        assertTrue(isHrvShown(hrvConf = 0.8, hrConf = 0.8, hrvThreshold = 0.8, hrThreshold = 0.8))
+    }
+
+    @Test
+    fun `hides HRV when confidences are missing`() {
+        assertFalse(isHrvShown(hrvConf = null, hrConf = 0.9, hrvThreshold = 0.8, hrThreshold = 0.8))
+        assertFalse(isHrvShown(hrvConf = 0.9, hrConf = null, hrvThreshold = 0.8, hrThreshold = 0.8))
+    }
+}
