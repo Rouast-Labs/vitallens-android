@@ -46,10 +46,16 @@ import org.mockito.kotlin.mock
 class StreamProcessorTest {
 
     private class FakeCamera : CameraStreaming {
+        /** The values passed to [setSettingsLocked], in order. */
+        val lockCalls = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+
         override val stream: Flow<InputFrame> = flow { awaitCancellation() }
         override suspend fun start() {}
         override fun stop() {}
         override fun showPreview(view: PreviewView) {}
+        override fun setSettingsLocked(locked: Boolean) {
+            lockCalls.add(locked)
+        }
     }
 
     private class FakeROIStrategy : ROIStrategy {
@@ -135,6 +141,7 @@ class StreamProcessorTest {
     private lateinit var strategy: FakeInferenceStrategy
     private lateinit var roiStrategy: FakeROIStrategy
     private lateinit var processor: StreamProcessor
+    private lateinit var camera: FakeCamera
 
     /**
      * ROICalculator.calculateROI's first call pays one-off JNA native-lib load/JIT warmup cost
@@ -147,9 +154,10 @@ class StreamProcessorTest {
 
         strategy = FakeInferenceStrategy()
         roiStrategy = FakeROIStrategy()
+        camera = FakeCamera()
         processor = StreamProcessor(
             strategy = strategy,
-            camera = FakeCamera(),
+            camera = camera,
             roiStrategy = roiStrategy,
             transformer = stubTransformer,
         )
@@ -240,6 +248,64 @@ class StreamProcessorTest {
         delay(1000)
 
         assertEquals(0, reported.get())
+    }
+
+    @Test
+    fun `camera settings are locked once a face has been in view for the delay`() = runBlocking {
+        processor.cameraLockDelayMs = 200
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        processor.processFrame(makeFrame(0.0))
+        delay(100)
+        assertEquals("Not before the delay", emptyList<Boolean>(), camera.lockCalls.toList())
+
+        delay(250)
+        assertEquals(listOf(true), camera.lockCalls.toList())
+    }
+
+    @Test
+    fun `camera settings are not locked if the face is lost before the delay`() = runBlocking {
+        processor.cameraLockDelayMs = 300
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+        processor.processFrame(makeFrame(0.0))
+
+        delay(100)
+        roiStrategy.currentRoi = null
+        processor.processFrame(makeFrame(0.1))
+        delay(500)
+
+        assertTrue(!camera.lockCalls.contains(true))
+    }
+
+    @Test
+    fun `camera settings are released when the face is lost and locked again when it returns`() = runBlocking {
+        processor.cameraLockDelayMs = 100
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+        processor.processFrame(makeFrame(0.0))
+        delay(250)
+        assertEquals(listOf(true), camera.lockCalls.toList())
+
+        roiStrategy.currentRoi = null
+        processor.processFrame(makeFrame(1.0))
+        delay(100)
+        assertEquals(listOf(true, false), camera.lockCalls.toList())
+
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+        processor.processFrame(makeFrame(2.0))
+        delay(250)
+        assertEquals(listOf(true, false, true), camera.lockCalls.toList())
+    }
+
+    @Test
+    fun `a stopped stream does not lock the camera later`() = runBlocking {
+        processor.cameraLockDelayMs = 200
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+        processor.processFrame(makeFrame(0.0))
+
+        processor.stop()
+        delay(400)
+
+        assertTrue(!camera.lockCalls.contains(true))
     }
 
     @Test

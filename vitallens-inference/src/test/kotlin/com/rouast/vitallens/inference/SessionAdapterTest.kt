@@ -37,6 +37,20 @@ class SessionAdapterTest {
         assertEquals(listOf("heart_rate", "sbp"), rustConfig.supportedVitals)
     }
 
+    @Test
+    fun `session config skips the start of a session when deriving HRV`() {
+        val config = ModelConfig(
+            nInputs = 4,
+            inputSize = 40,
+            fpsTarget = 30.0,
+            roiMethod = "face",
+            supportedVitals = listOf("heart_rate", "hrv_sdnn"),
+        )
+
+        // The model's output is unsettled at the start of a session. Internal setting.
+        assertEquals(3f, config.toSessionConfig().hrvSkipSeconds)
+    }
+
     // Geometry Mapping
 
     @Test
