@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import com.rouast.vitallens.VitalLens
 import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.inference.model.VitalLensResult
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -276,10 +275,12 @@ private class ScanController(
         statusMessage = SLOW_CONNECTION_MESSAGE
         noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
 
+        val restartToken = sessionToken
         scope.launch {
             // Give the stopped camera session time to shut down
             delay(300)
-            startSession(context, view)
+            // Not if the scan was cancelled or stopped in the meantime
+            if (restartToken == sessionToken && scanState == ScanState.SEARCHING) startSession(context, view)
         }
     }
 
@@ -339,14 +340,9 @@ private class ScanController(
 
         scope.launch { watchForStall(token) }
         sessionJob = scope.launch {
-            try {
+            runSession(onError = { transition(ScanState.ISSUE, "Error: ${it.message}") }) {
                 val stream = newClient.startStream(preview = view)
                 stream.collect { result -> if (token == sessionToken) updateUI(result) }
-            } catch (e: CancellationException) {
-                // The session was replaced or stopped on purpose (e.g. fallback to eco mode)
-                throw e
-            } catch (e: Exception) {
-                transition(ScanState.ISSUE, "Error: ${e.message}")
             }
         }
     }

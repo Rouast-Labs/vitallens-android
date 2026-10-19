@@ -1,5 +1,11 @@
 package com.rouast.vitallens.ui
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -43,5 +49,42 @@ class ConnectionFeedbackTest {
     @Test
     fun `the default mode is standard`() {
         assertEquals(VitalLensMode.STANDARD, DEFAULT_VITALLENS_MODE)
+    }
+
+    @Test
+    fun `a cancelled session is not reported as an error`() = runBlocking {
+        var error: Exception? = null
+        val started = CompletableDeferred<Unit>()
+        val job = launch {
+            runSession(onError = { error = it }) {
+                started.complete(Unit)
+                awaitCancellation()
+            }
+        }
+        started.await()
+        job.cancel()
+        job.join()
+
+        assertEquals(null, error)
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `a failing session is reported as an error`() = runBlocking {
+        var error: Exception? = null
+        runSession(onError = { error = it }) { throw IllegalStateException("boom") }
+
+        assertEquals("boom", error?.message)
+    }
+
+    @Test
+    fun `cancellation inside the session still propagates`() = runBlocking {
+        var propagated = false
+        try {
+            runSession(onError = {}) { throw CancellationException("stop") }
+        } catch (e: CancellationException) {
+            propagated = true
+        }
+        assertTrue(propagated)
     }
 }

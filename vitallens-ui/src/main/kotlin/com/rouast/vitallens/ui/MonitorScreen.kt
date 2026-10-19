@@ -56,7 +56,6 @@ import com.rouast.vitallens.VitalLens
 import com.rouast.vitallens.inference.ConnectionThresholds
 import com.rouast.vitallens.core.WaveformMode
 import com.rouast.vitallens.inference.model.VitalLensResult
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -293,10 +292,12 @@ private class MonitorController(
         feedbackMessage = SLOW_CONNECTION_MESSAGE
         noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
 
+        val restartToken = sessionToken
         scope.launch {
             // Give the stopped camera session time to shut down
             delay(300)
-            startSession(view)
+            // Not if the monitor was stopped in the meantime
+            if (restartToken == sessionToken && isProcessing) startSession(view)
         }
     }
 
@@ -326,18 +327,17 @@ private class MonitorController(
 
         scope.launch { watchForStall(token) }
         sessionJob = scope.launch {
-            try {
+            runSession(
+                onError = { e ->
+                    // No user-visible error state for a stream startup failure — it just reverts
+                    // silently to idle. Still logged so the failure (e.g. an invalid API key) is
+                    // diagnosable from logcat rather than leaving no trace at all.
+                    Log.e(LOG_TAG, "startSession failed", e)
+                    stopProcessing()
+                },
+            ) {
                 val stream = newClient.startStream(preview = view)
                 stream.collect { result -> if (token == sessionToken) updateUI(result) }
-            } catch (e: CancellationException) {
-                // The session was replaced or stopped on purpose (e.g. fallback to eco mode)
-                throw e
-            } catch (e: Exception) {
-                // No user-visible error state for a stream startup failure — it just reverts
-                // silently to idle. Still logged so the failure (e.g. an invalid API key) is
-                // diagnosable from logcat rather than leaving no trace at all.
-                Log.e(LOG_TAG, "startSession failed", e)
-                stopProcessing()
             }
         }
     }

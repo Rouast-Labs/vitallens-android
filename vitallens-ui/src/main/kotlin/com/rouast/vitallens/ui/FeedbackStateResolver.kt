@@ -1,6 +1,7 @@
 package com.rouast.vitallens.ui
 
 import com.rouast.vitallens.inference.ConnectionThresholds
+import kotlinx.coroutines.CancellationException
 import com.rouast.vitallens.inference.Rect
 
 private const val FACE_CONF_THRESHOLD = 0.5
@@ -25,6 +26,21 @@ internal fun isStalled(
     msSinceLastResult: Long,
     timeoutMs: Long = ConnectionThresholds.STALL_TIMEOUT_MS,
 ): Boolean = waitingForResults && msSinceLastResult > timeoutMs
+
+/**
+ * Runs a stream session and reports failures to [onError]. A cancellation is not a failure: it
+ * means the session was stopped or replaced on purpose (e.g. falling back to eco mode), so it is
+ * rethrown instead of being reported.
+ */
+internal suspend fun runSession(onError: (Exception) -> Unit, block: suspend () -> Unit) {
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onError(e)
+    }
+}
 
 private val Rect.midX: Float get() = x + width / 2f
 private val Rect.midY: Float get() = y + height / 2f
