@@ -60,7 +60,7 @@ private const val SCAN_DURATION_SECONDS = 30.0
 private const val WARM_UP_DURATION_SECONDS = 3.0
 private const val RECOVERY_TIMEOUT_SECONDS = 10.0
 private const val VITAL_CONF_THRESHOLD = 0.8
-private const val HRV_CONF_THRESHOLD = 0.7
+private const val HRV_CONF_THRESHOLD = 0.8
 
 /** The operational states of the scanning process. */
 enum class ScanState { IDLE, SEARCHING, WARMING_UP, TRACKING, RECOVERING, ISSUE, COMPLETED }
@@ -429,9 +429,11 @@ private class ScanController(
             ),
         )
 
+        // HRV is only shown together with a confident heart rate
+        val hrShown = (result.heartRate?.confidence ?: 0.0) >= VITAL_CONF_THRESHOLD
         secondaryVitals = listOfNotNull(
-            resolveSecondaryVital("hrv_sdnn", result.hrvSdnn?.value, result.hrvSdnn?.confidence ?: 0.0, HRV_CONF_THRESHOLD),
-            resolveSecondaryVital("hrv_rmssd", result.hrvRmssd?.value, result.hrvRmssd?.confidence ?: 0.0, HRV_CONF_THRESHOLD),
+            resolveSecondaryVital("hrv_sdnn", result.hrvSdnn?.value.takeIf { hrShown }, result.hrvSdnn?.confidence ?: 0.0, HRV_CONF_THRESHOLD),
+            resolveSecondaryVital("hrv_rmssd", result.hrvRmssd?.value.takeIf { hrShown }, result.hrvRmssd?.confidence ?: 0.0, HRV_CONF_THRESHOLD),
             resolveSecondaryVital("ie_ratio", result.vitals["ie_ratio"]?.value, result.vitals["ie_ratio"]?.confidence ?: 0.0, VITAL_CONF_THRESHOLD),
         )
 

@@ -7,6 +7,16 @@ import com.rouast.vitallens.inference.Rect
 private const val FACE_CONF_THRESHOLD = 0.5
 private const val PPG_CONF_THRESHOLD = 0.5
 
+/**
+ * Whether an HRV metric may be shown. HRV is only shown when it is confident itself and heart rate
+ * is confident too: users should not see an HRV without a heart rate. Keep this rule in sync with
+ * the other VitalLens SDKs.
+ */
+internal fun isHrvShown(hrvConf: Double?, hrConf: Double?, hrvThreshold: Double, hrThreshold: Double): Boolean {
+    if (hrvConf == null || hrConf == null) return false
+    return hrvConf >= hrvThreshold && hrConf >= hrThreshold
+}
+
 /** Hint shown when the signal is weak. Keep wording in sync with the other SDKs. */
 internal const val LOW_CONFIDENCE_MESSAGE = "Low confidence.\nUse steady light, move closer, and hold still."
 

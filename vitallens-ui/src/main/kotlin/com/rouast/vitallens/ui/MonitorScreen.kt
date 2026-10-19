@@ -66,7 +66,7 @@ import java.util.Locale
 private const val LOG_TAG = "MonitorScreen"
 private const val MONITOR_ROUAST_API_URL = "https://www.rouast.com/api/"
 private const val VITAL_CONF_THRESHOLD = 0.8
-private const val HRV_CONF_THRESHOLD = 0.7
+private const val HRV_CONF_THRESHOLD = 0.8
 private const val FACE_CONF_THRESHOLD = 0.5
 
 /** The operational state of the live monitor. */
@@ -184,8 +184,8 @@ private class MonitorController(
 
     val isHrReady: Boolean get() = hrValue != null && hrConf >= VITAL_CONF_THRESHOLD
     val isRrReady: Boolean get() = rrValue != null && rrConf >= VITAL_CONF_THRESHOLD
-    val isSdnnReady: Boolean get() = sdnnValue != null && sdnnConf >= HRV_CONF_THRESHOLD
-    val isRmssdReady: Boolean get() = rmssdValue != null && rmssdConf >= HRV_CONF_THRESHOLD
+    val isSdnnReady: Boolean get() = sdnnValue != null && isHrvShown(sdnnConf, hrConf, HRV_CONF_THRESHOLD, VITAL_CONF_THRESHOLD)
+    val isRmssdReady: Boolean get() = rmssdValue != null && isHrvShown(rmssdConf, hrConf, HRV_CONF_THRESHOLD, VITAL_CONF_THRESHOLD)
     val isIeReady: Boolean get() = ieRatioValue != null && ieRatioConf >= VITAL_CONF_THRESHOLD
     val isPpgReady: Boolean get() = rollingAverage(ppgConfHistory, ppgConfHistory.size) >= VITAL_CONF_THRESHOLD && hasEnoughData
     val isRespReady: Boolean get() = rollingAverage(respConfHistory, respConfHistory.size) >= VITAL_CONF_THRESHOLD && hasEnoughData
@@ -389,7 +389,8 @@ private class MonitorController(
         val (newState, newMessage) = resolveMonitorFeedback(
             hasConfidentHr = hrConf >= VITAL_CONF_THRESHOLD,
             hasConfidentRr = rrConf >= VITAL_CONF_THRESHOLD,
-            hasConfidentHrv = sdnnConf >= HRV_CONF_THRESHOLD || rmssdConf >= HRV_CONF_THRESHOLD,
+            hasConfidentHrv = isHrvShown(sdnnConf, hrConf, HRV_CONF_THRESHOLD, VITAL_CONF_THRESHOLD) ||
+                isHrvShown(rmssdConf, hrConf, HRV_CONF_THRESHOLD, VITAL_CONF_THRESHOLD),
             showWaveforms = showWaveforms,
             hasEnoughData = hasEnoughData,
         )
