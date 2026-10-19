@@ -75,13 +75,11 @@ class MonitorScreenTest {
     }
 
     @Test
-    fun `dynamicTileWidth widens the tile when secondary vitals are present`() {
-        assertEquals(170, dynamicTileWidth(showWaveforms = true, hasSecondaryVitals = true))
-    }
-
-    @Test
-    fun `dynamicTileWidth narrows the tile without secondary vitals`() {
-        assertEquals(110, dynamicTileWidth(showWaveforms = true, hasSecondaryVitals = false))
+    fun `dynamicTileWidth is a fixed narrow column next to the charts, with or without secondary vitals`() {
+        // The metrics are plain text, so the column is only as wide as its content (as in the JS Monitor)
+        // and the chart gets the rest. The width must not change when HRV appears.
+        assertEquals(100, dynamicTileWidth(showWaveforms = true, hasSecondaryVitals = true))
+        assertEquals(100, dynamicTileWidth(showWaveforms = true, hasSecondaryVitals = false))
     }
 
     @Test
