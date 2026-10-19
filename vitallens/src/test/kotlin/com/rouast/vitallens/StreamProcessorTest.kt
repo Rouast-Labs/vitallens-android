@@ -71,6 +71,8 @@ class StreamProcessorTest {
         val stateHistory = mutableListOf<InferenceState?>()
 
         @Volatile var shouldFail = false
+        @Volatile var failWithNetworkError = false
+        @Volatile var inferDelayMs = 0L
 
         override suspend fun bufferConfig(): BufferConfig =
             BufferConfig(minNoState = 4u, minWithState = 2u, streamMax = 10u, fileMax = 10u, overlap = 1u)
@@ -96,7 +98,10 @@ class StreamProcessorTest {
             stateHistory.add(state)
             inferCallCount++
 
+            if (inferDelayMs > 0) delay(inferDelayMs)
+
             if (shouldFail) {
+                if (failWithNetworkError) throw VitalLensException.NetworkError(java.io.IOException("timeout"))
                 throw VitalLensException.ServerError(500, "Mock Failure")
             }
 
@@ -169,6 +174,72 @@ class StreamProcessorTest {
         delay(200)
 
         assertTrue("Strategy should be called when buffer fills", strategy.inferCallCount > 0)
+    }
+
+    @Test
+    fun `a slow request reports a slow connection once`() = runBlocking {
+        strategy.inferDelayMs = 2200
+        val reported = java.util.concurrent.atomic.AtomicInteger()
+        processor.setSlowConnectionCallback { reported.incrementAndGet() }
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        for (i in 0 until 10) processor.processFrame(makeFrame(i * 0.033))
+        delay(2800)
+
+        assertEquals("A request over 2 s at 30 fps should report a slow connection once", 1, reported.get())
+    }
+
+    @Test
+    fun `fast requests do not report a slow connection`() = runBlocking {
+        val reported = java.util.concurrent.atomic.AtomicInteger()
+        processor.setSlowConnectionCallback { reported.incrementAndGet() }
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        for (i in 0 until 10) processor.processFrame(makeFrame(i * 0.033))
+        delay(300)
+
+        assertEquals(0, reported.get())
+    }
+
+    @Test
+    fun `too many queued frames report an unstable connection once and send no request`() = runBlocking {
+        val reported = java.util.concurrent.atomic.AtomicInteger()
+        processor.setConnectionUnstableCallback { reported.incrementAndGet() }
+        processor.streamResetFrames = 1
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        for (i in 0 until 15) processor.processFrame(makeFrame(i * 0.033))
+        delay(400)
+
+        assertEquals(1, reported.get())
+        assertEquals("No request should be sent once the queue is too long", 0, strategy.inferCallCount)
+    }
+
+    @Test
+    fun `repeated network errors report an unstable connection once`() = runBlocking {
+        val reported = java.util.concurrent.atomic.AtomicInteger()
+        processor.setConnectionUnstableCallback { reported.incrementAndGet() }
+        strategy.shouldFail = true
+        strategy.failWithNetworkError = true
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        for (i in 0 until 30) processor.processFrame(makeFrame(i * 0.033))
+        delay(1000)
+
+        assertEquals(1, reported.get())
+    }
+
+    @Test
+    fun `server errors do not report an unstable connection`() = runBlocking {
+        val reported = java.util.concurrent.atomic.AtomicInteger()
+        processor.setConnectionUnstableCallback { reported.incrementAndGet() }
+        strategy.shouldFail = true
+        roiStrategy.currentRoi = Rect(0.25f, 0.25f, 0.5f, 0.5f)
+
+        for (i in 0 until 30) processor.processFrame(makeFrame(i * 0.033))
+        delay(1000)
+
+        assertEquals(0, reported.get())
     }
 
     @Test
