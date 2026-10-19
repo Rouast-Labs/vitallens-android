@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rouast.vitallens.VitalLens
@@ -175,6 +176,7 @@ private class ScanController(
     fun startProcessing() {
         autoFallbackDone = false
         scanState = ScanState.SEARCHING
+        messageHold.release()
         statusMessage = "Position your face in the oval"
         progress = 0.0
         accumulatedScanTime = 0.0
@@ -206,7 +208,7 @@ private class ScanController(
 
     private fun transition(newState: ScanState, message: String) {
         scanState = newState
-        setStatus(message, force = newState == ScanState.ISSUE)
+        setStatus(message, force = newState == ScanState.ISSUE, state = newState)
         stateStartTimeMs = System.currentTimeMillis()
 
         if (newState == ScanState.ISSUE) {
@@ -218,9 +220,32 @@ private class ScanController(
         }
     }
 
+    /**
+     * Keeps problem hints on screen long enough to read: a hint (the recovering state) stays for at
+     * least 3 s, even if the problem is gone, and messages arriving meanwhile wait.
+     */
+    private val messageHold = MessageHold(
+        schedule = { delayMs, action ->
+            val job = scope.launch {
+                delay(delayMs)
+                action()
+            }
+            val cancel: () -> Unit = { job.cancel() }
+            cancel
+        },
+        apply = { text, force ->
+            if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force)) statusMessage = text
+        },
+    )
+
     /** Sets the status message, unless a notice is being shown. Issues always show. */
-    private fun setStatus(message: String, force: Boolean = false) {
-        if (shouldShowMessage(System.currentTimeMillis(), noticeUntilMs, force)) statusMessage = message
+    private fun setStatus(message: String, force: Boolean = false, state: ScanState? = null) {
+        messageHold.show(
+            message,
+            hold = state == ScanState.RECOVERING,
+            immediate = state == ScanState.IDLE || state == ScanState.ISSUE || state == ScanState.COMPLETED,
+            force = force,
+        )
     }
 
     /** Stops the scan because the connection is too unstable to continue. */
@@ -272,6 +297,7 @@ private class ScanController(
 
         scanState = ScanState.SEARCHING
         stateStartTimeMs = System.currentTimeMillis()
+        messageHold.release()
         statusMessage = SLOW_CONNECTION_MESSAGE
         noticeUntilMs = System.currentTimeMillis() + NOTICE_DURATION_MS
 
@@ -297,7 +323,7 @@ private class ScanController(
         when {
             result.state == ScanState.SEARCHING && scanState != ScanState.SEARCHING -> {
                 scanState = ScanState.SEARCHING
-                setStatus(result.message)
+                setStatus(result.message, state = ScanState.SEARCHING)
                 progress = 0.0
                 accumulatedScanTime = 0.0
                 stateStartTimeMs = System.currentTimeMillis()
@@ -309,7 +335,7 @@ private class ScanController(
             }
             result.state == ScanState.ISSUE -> transition(ScanState.ISSUE, result.message)
             result.state != scanState -> transition(result.state, result.message)
-            result.message != statusMessage -> setStatus(result.message)
+            result.message != statusMessage -> setStatus(result.message, state = result.state)
         }
     }
 
@@ -538,6 +564,7 @@ private fun ScanUILayer(controller: ScanController, onCameraViewAvailable: (Prev
             controller.statusMessage,
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White,
+            textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 40.dp)
