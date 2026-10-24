@@ -15,6 +15,12 @@ android {
 
     defaultConfig {
         minSdk = 26
+        // The SDK release version (root build.gradle.kts), sent to the API as part of the origin
+        buildConfigField("String", "VERSION", "\"${project.version}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

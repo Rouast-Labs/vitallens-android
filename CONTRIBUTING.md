@@ -75,16 +75,27 @@ using the same `com.vanniktech.maven.publish` setup as `vitallens-core`'s Kotlin
 artifact. A GitHub Action publishes all three and creates a GitHub Release whenever a semantic
 version tag is pushed.
 
+The SDK also sends its version to the API as part of the origin (`vitallens-android_<version>`), taken from the same version in the root `build.gradle.kts` (via `BuildConfig`), so there is nothing else to keep in sync.
+
 To cut a new release:
 
-1. **Bump the version** in the root `build.gradle.kts` (`allprojects { version = "..." }`).
-2. **Tag the release:**
+1. **Get your changes into `main`:** work on `dev` and merge it into `main` with a PR (CI runs on PRs to `main`).
+2. **Create the version commit and tag on `main`:**
     ```bash
-    git tag v0.1.0
+    git switch main
+    git pull origin main
+    ./scripts/release.sh 0.2.1
     ```
-3. **Push the tag:**
+    This sets `allprojects { version = "..." }` in the root `build.gradle.kts` and the version in the README install snippet, commits them as `0.2.1` and creates the tag `v0.2.1`. Nothing is pushed yet. It refuses to run unless you are on an up-to-date `main` with a clean working tree.
+3. **Push the commit and the tag:**
     ```bash
-    git push origin v0.1.0
+    git push origin main --follow-tags
+    ```
+4. **Sync `dev`:**
+    ```bash
+    git switch dev
+    git merge main
+    git push origin dev
     ```
 
 The release workflow requires manual approval (via the `maven-central` GitHub Environment)
