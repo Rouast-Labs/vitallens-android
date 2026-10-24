@@ -2,6 +2,7 @@ package com.rouast.vitallens.inference.network
 
 import android.graphics.Bitmap
 import com.rouast.vitallens.core.InferenceMode
+import com.rouast.vitallens.inference.BuildConfig
 import com.rouast.vitallens.inference.InferenceContext
 import com.rouast.vitallens.inference.InferenceStrategy
 import com.rouast.vitallens.inference.InferenceUnit
@@ -263,6 +264,9 @@ class ApiInferenceTest {
         assertEquals("application/octet-stream", recorded.headers["Content-Type"])
         assertEquals("gzip", recorded.headers["X-Encoding"])
         assertEquals("vitallens-2.0", recorded.headers["X-Model"])
+        assertEquals("vitallens-android_${BuildConfig.VERSION}", recorded.headers["X-Origin"])
+        // Same pattern the API accepts: a short label of letters, digits and . _ + -
+        assertTrue(Regex("^vitallens-android_\\d+\\.\\d+\\.\\d+$").matches(recorded.headers["X-Origin"]!!))
 
         val stateHeader = recorded.headers["X-State"]
         assertNotNull(stateHeader)
@@ -294,7 +298,7 @@ class ApiInferenceTest {
         assertNull(recorded.headers["X-State"])
 
         val json = Json.parseToJsonElement(recorded.body!!.utf8()).jsonObject
-        assertEquals("vitallens-android", json["origin"]?.jsonPrimitive?.content)
+        assertEquals("vitallens-android_${BuildConfig.VERSION}", json["origin"]?.jsonPrimitive?.content)
         assertEquals("test-model", json["model"]?.jsonPrimitive?.content)
         assertEquals(Base64.getEncoder().encodeToString(rawData), json["video"]?.jsonPrimitive?.content)
         assertNotNull(json["state"])

@@ -1,5 +1,6 @@
 package com.rouast.vitallens.inference.network
 
+import com.rouast.vitallens.inference.BuildConfig
 import com.rouast.vitallens.core.BufferConfig
 import com.rouast.vitallens.core.InferenceMode
 import com.rouast.vitallens.core.computeBufferConfig
@@ -273,7 +274,8 @@ class ApiInference(
 
     companion object {
         private val PRODUCTION_BASE_URL = "https://api.rouast.com/vitallens-v3".toHttpUrl()
-        private const val ORIGIN = "vitallens-android"
+        /** Sent to the API so usage can be broken down by client version, e.g. `vitallens-android_0.2.0`. */
+        internal val ORIGIN = "vitallens-android_${BuildConfig.VERSION}"
     }
 }
 
