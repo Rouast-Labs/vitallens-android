@@ -30,7 +30,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.rouast:vitallens-ui:0.2.1")
+    implementation("com.rouast:vitallens-ui:0.3.0")
 }
 ```
 
