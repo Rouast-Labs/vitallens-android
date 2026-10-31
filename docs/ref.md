@@ -182,7 +182,7 @@ client.close()
 
 ### `VitalLensResult`
 
-The data structure returned by the SDK. All physiological data is represented as arrays matching the frame count, with convenient scalar accessors.
+The data structure returned by the SDK. All physiological data is represented as arrays matching the frame count, with convenient scalar accessors. The vital keys, when each value is available and how to use the confidence scores are the same for all clients and described in [Understanding Results](https://docs.rouast.com/guides/results/).
 
 | Property | Type | Description |
 | --- | --- | --- |
