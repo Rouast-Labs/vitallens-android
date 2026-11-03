@@ -115,7 +115,7 @@ class FileProcessor(
         val nominalFps = source.nominalFrameRate.toDouble()
 
         val buffer = FrameBuffer(id = "file", roi = roi, mode = InferenceMode.FILE, config = config, createdAt = 0.0)
-        val session = Session(config.toSessionConfig())
+        val session = Session(config.toSessionConfig(live = false))
 
         try {
             var currentState: InferenceState? = null

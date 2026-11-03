@@ -5,6 +5,7 @@ import com.rouast.vitallens.core.SessionConfig
 import com.rouast.vitallens.core.SessionInput
 import com.rouast.vitallens.core.SessionResult
 import com.rouast.vitallens.core.SignalInput
+import com.rouast.vitallens.core.coreVersion
 import com.rouast.vitallens.inference.model.FaceData
 import com.rouast.vitallens.inference.model.StateData
 import com.rouast.vitallens.inference.model.Vital
@@ -14,13 +15,17 @@ import com.rouast.vitallens.inference.network.ModelConfig
 import com.rouast.vitallens.core.Rect as CoreRect
 
 /**
- * Seconds at the start of a session that are not used when deriving HRV: the model's output is
- * unsettled at first. Internal setting, not exposed to users.
+ * Seconds at the start of a live session that are not used when deriving HRV: the model's output is
+ * unsettled at first. Video files use everything. Internal setting, not exposed to users.
  */
 internal const val HRV_SKIP_SECONDS = 3f
 
-/** Converts this [ModelConfig] into a [SessionConfig] required by the Core engine. */
-fun ModelConfig.toSessionConfig(): SessionConfig = SessionConfig(
+/**
+ * Converts this [ModelConfig] into a [SessionConfig] required by the Core engine.
+ *
+ * @param live Whether the session processes a live stream rather than a video file.
+ */
+fun ModelConfig.toSessionConfig(live: Boolean = true): SessionConfig = SessionConfig(
     modelName = modelName,
     supportedVitals = supportedVitals,
     returnWaveforms = listOf("ppg_waveform", "respiratory_waveform"),
@@ -29,7 +34,7 @@ fun ModelConfig.toSessionConfig(): SessionConfig = SessionConfig(
     nInputs = nInputs.toULong(),
     roiMethod = roiMethod,
     estimateRollingVitals = null,
-    hrvSkipSeconds = HRV_SKIP_SECONDS,
+    hrvSkipSeconds = if (live) HRV_SKIP_SECONDS else 0f,
 )
 
 /** Converts this [Rect] into the generated Core [CoreRect]. */
@@ -103,5 +108,6 @@ fun SessionResult.toVitalLensResult(
         message = message ?: this.message,
         sampleCount = timestamp.size,
         rollingVitals = finalRollingVitals,
+        coreVersion = coreVersion(),
     )
 }

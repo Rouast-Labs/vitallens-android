@@ -110,9 +110,15 @@ class IntegrationTest {
             assertEquals("Bounding box should contain exactly 4 coordinates [minX, minY, maxX, maxY]", 4, it.size)
         }
 
+        println("[Integration] Core version: ${result.coreVersion ?: "unknown"}")
+        assertEquals("vitallens-2.0", result.modelUsed)
+        assertNotNull(result.coreVersion)
+
+        // HR and HRV reference values from the contact PPG recorded with the video
+        // (sample_vitals_2.csv in the examples of vitallens-python and vitallens.js)
         val hr = requireNotNull(result.heartRate?.value) { "Missing heart rate" }
         println("[Integration] Heart Rate: $hr")
-        assertEquals(60.5, hr, 2.0)
+        assertEquals(60.4, hr, 0.5)
 
         val rr = requireNotNull(result.respiratoryRate?.value) { "Missing respiratory rate" }
         println("[Integration] Resp Rate: $rr")
@@ -120,11 +126,11 @@ class IntegrationTest {
 
         val sdnn = requireNotNull(result.hrvSdnn?.value) { "Missing HRV SDNN" }
         println("[Integration] HRV SDNN: $sdnn")
-        assertEquals(65.0, sdnn, 10.0)
+        assertEquals(62.0, sdnn, 10.0)
 
         val rmssd = requireNotNull(result.hrvRmssd?.value) { "Missing HRV RMSSD" }
         println("[Integration] HRV RMSSD: $rmssd")
-        assertEquals(65.0, rmssd, 10.0)
+        assertEquals(54.0, rmssd, 10.0)
 
         result.vitals["ie_ratio"]?.value?.let {
             println("[Integration] I:E Ratio: $it")
