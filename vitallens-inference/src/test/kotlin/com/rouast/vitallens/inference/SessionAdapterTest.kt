@@ -4,6 +4,7 @@ import com.rouast.vitallens.core.FaceResult
 import com.rouast.vitallens.core.SessionResult
 import com.rouast.vitallens.core.VitalResult
 import com.rouast.vitallens.core.WaveformResult
+import com.rouast.vitallens.core.coreVersion
 import com.rouast.vitallens.inference.model.FaceData
 import com.rouast.vitallens.inference.model.StateData
 import com.rouast.vitallens.inference.model.VitalLensResult
@@ -47,8 +48,10 @@ class SessionAdapterTest {
             supportedVitals = listOf("heart_rate", "hrv_sdnn"),
         )
 
-        // The model's output is unsettled at the start of a session. Internal setting.
+        // The model's output is unsettled at the start of a live session. Internal setting.
         assertEquals(3f, config.toSessionConfig().hrvSkipSeconds)
+        // Video files use everything
+        assertEquals(0f, config.toSessionConfig(live = false).hrvSkipSeconds)
     }
 
     // Geometry Mapping
@@ -127,6 +130,7 @@ class SessionAdapterTest {
 
         assertEquals("override", vlResult.message)
         assertEquals("test_model", vlResult.modelUsed)
+        assertEquals(coreVersion(), vlResult.coreVersion)
         assertEquals("b64", vlResult.state?.data)
         assertEquals(60.0, vlResult.heartRate?.value ?: 0.0, 0.0001)
         assertEquals(2, vlResult.ppg?.data?.size)

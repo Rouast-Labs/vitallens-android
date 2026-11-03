@@ -44,6 +44,8 @@ data class VitalLensResult(
     val sampleCount: Int? = null,
     val auxiliary: ResultAuxiliaryData? = null,
     val rollingVitals: Map<String, Waveform>? = null,
+    /** The version of vitallens-core that computed the vitals. */
+    val coreVersion: String? = null,
 ) {
     val ppg: Waveform? get() = waveforms["ppg_waveform"]
     val resp: Waveform? get() = waveforms["respiratory_waveform"]
@@ -63,8 +65,8 @@ data class VitalLensResult(
  *   timestamps and never read from the raw API response.
  * - `vitals`/`waveforms` entries are decoded individually and a malformed entry is skipped
  *   rather than failing the whole response; `rolling_vitals` is decoded strictly (all-or-nothing).
- * - `model_used`/`n` are the decode keys (matching the API's snake_case wire format), but
- *   `modelUsed`/`sampleCount` (camelCase) are the encode keys — decode and encode serve different
+ * - `model_used`/`core_version`/`n` are the decode keys (matching the API's snake_case wire format), but
+ *   `modelUsed`/`coreVersion`/`sampleCount` (camelCase) are the encode keys — decode and encode serve different
  *   purposes (reading the live API response vs. producing this type's own JSON representation
  *   elsewhere), so they don't need matching key casing.
  */
@@ -95,6 +97,7 @@ object VitalLensResultSerializer : KSerializer<VitalLensResult> {
             message = obj["message"]?.jsonPrimitive?.contentOrNull,
             sampleCount = obj["n"]?.jsonPrimitive?.intOrNull,
             rollingVitals = rollingVitals,
+            coreVersion = obj["core_version"]?.jsonPrimitive?.contentOrNull,
         )
     }
 
@@ -123,6 +126,7 @@ object VitalLensResultSerializer : KSerializer<VitalLensResult> {
                 put("time", json.encodeToJsonElement(ListSerializer(Double.serializer()), value.time))
                 value.fps?.let { put("fps", it) }
                 value.modelUsed?.let { put("modelUsed", it) }
+                value.coreVersion?.let { put("coreVersion", it) }
                 value.state?.let { put("state", json.encodeToJsonElement(StateDataSerializer, it)) }
                 value.message?.let { put("message", it) }
                 value.sampleCount?.let { put("sampleCount", it) }

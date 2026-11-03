@@ -2,6 +2,7 @@ package com.rouast.vitallens.camera
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.Image
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaExtractor
@@ -48,9 +49,81 @@ internal fun parseFrameRate(captureFrameRate: String?, frameCount: String?, dura
 
 private fun MediaFormat.getIntegerOrNull(key: String): Int? = if (containsKey(key)) getInteger(key) else null
 
+/** BT.601 integer YUV→RGB conversion of one pixel; [u] and [v] are already centred on zero. */
+private fun yuvToArgb(y: Int, u: Int, v: Int): Int {
+    val y1192 = 1192 * (y - 16)
+    val r = ((y1192 + 1634 * v) shr 10).coerceIn(0, 255)
+    val g = ((y1192 - 833 * v - 400 * u) shr 10).coerceIn(0, 255)
+    val b = ((y1192 + 2066 * u) shr 10).coerceIn(0, 255)
+    return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+}
+
+/**
+ * Converts YUV 4:2:0 planes into ARGB pixels, reading each plane through its own row and pixel
+ * stride, as described by [Image.Plane]. This covers planar chroma (pixel stride 1, separate U and
+ * V planes) and semi-planar chroma (pixel stride 2, U and V interleaved) alike, so it does not
+ * depend on which layout a decoder chose for a [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible]
+ * request. The U and V planes share [uvRowStride] and [uvPixelStride], as `YUV_420_888` guarantees.
+ * [left]/[top] offset into the planes for a crop rectangle.
+ */
+internal fun yuvPlanesToArgb(
+    y: ByteBuffer,
+    yRowStride: Int,
+    yPixelStride: Int,
+    u: ByteBuffer,
+    v: ByteBuffer,
+    uvRowStride: Int,
+    uvPixelStride: Int,
+    width: Int,
+    height: Int,
+    left: Int = 0,
+    top: Int = 0,
+): IntArray {
+    val pixels = IntArray(width * height)
+    for (row in 0 until height) {
+        val yRowStart = (top + row) * yRowStride
+        val uvRowStart = ((top + row) / 2) * uvRowStride
+        for (col in 0 until width) {
+            val luma = y.get(yRowStart + (left + col) * yPixelStride).toInt() and 0xFF
+            val uvIndex = uvRowStart + ((left + col) / 2) * uvPixelStride
+            val cb = (u.get(uvIndex).toInt() and 0xFF) - 128
+            val cr = (v.get(uvIndex).toInt() and 0xFF) - 128
+            pixels[row * width + col] = yuvToArgb(luma, cb, cr)
+        }
+    }
+    return pixels
+}
+
+/** Converts a decoder output [Image] (`YUV_420_888`) into a [Bitmap] of its crop rectangle. */
+private fun decodeImageToBitmap(image: Image): Bitmap {
+    val crop = image.cropRect
+    val (yPlane, uPlane, vPlane) = image.planes
+    val pixels = yuvPlanesToArgb(
+        y = yPlane.buffer,
+        yRowStride = yPlane.rowStride,
+        yPixelStride = yPlane.pixelStride,
+        u = uPlane.buffer,
+        v = vPlane.buffer,
+        uvRowStride = uPlane.rowStride,
+        uvPixelStride = uPlane.pixelStride,
+        width = crop.width(),
+        height = crop.height(),
+        left = crop.left,
+        top = crop.top,
+    )
+    return Bitmap.createBitmap(pixels, crop.width(), crop.height(), Bitmap.Config.ARGB_8888)
+}
+
 /**
  * Converts one YUV 4:2:0 output buffer from a buffer-mode [MediaCodec] decode (no output
  * [android.view.Surface]) into a [Bitmap] via a direct BT.601 integer YUV→RGB conversion.
+ *
+ * Fallback only: [FileSource.frames] reads the decoder's own plane layout through
+ * [MediaCodec.getOutputImage] and uses [decodeImageToBitmap]. This function has to guess the
+ * layout from the reported color format, and a decoder can report
+ * [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible] while writing planar data (the
+ * emulator's `c2.goldfish.h264.decoder` does), which the guess below reads as semi-planar and
+ * so mixes up the chroma.
  *
  * [MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible], requested at configure time, is
  * one of two concrete layouts here: fully planar (Y, then U, then V, each its own contiguous
@@ -115,12 +188,7 @@ private fun decodeYuvBufferToBitmap(
                 v = (buffer.get(vStart + chromaRow * chromaRowStride + chromaCol).toInt() and 0xFF) - 128
             }
 
-            val y1192 = 1192 * (y - 16)
-            val r = ((y1192 + 1634 * v) shr 10).coerceIn(0, 255)
-            val g = ((y1192 - 833 * v - 400 * u) shr 10).coerceIn(0, 255)
-            val b = ((y1192 + 2066 * u) shr 10).coerceIn(0, 255)
-
-            pixels[row * width + col] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+            pixels[row * width + col] = yuvToArgb(y, u, v)
         }
     }
 
@@ -187,6 +255,7 @@ class FileSource private constructor(
             var inputDone = false
             var outputDone = false
             var outputFormat = decoder.outputFormat
+            var warnedNoImage = false
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -211,7 +280,19 @@ class FileSource private constructor(
                     height = outputFormat.getIntegerOrNull(MediaFormat.KEY_HEIGHT) ?: height
                 } else if (outputIndex >= 0) {
                     val isEos = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                    if (bufferInfo.size > 0) {
+                    val image = if (bufferInfo.size > 0) runCatching { decoder.getOutputImage(outputIndex) }.getOrNull() else null
+                    if (image != null) {
+                        val bitmap = try {
+                            decodeImageToBitmap(image)
+                        } finally {
+                            image.close()
+                        }
+                        emit(bitmap)
+                    } else if (bufferInfo.size > 0) {
+                        if (!warnedNoImage) {
+                            Log.w(LOG_TAG, "Decoder provides no output Image, guessing the YUV layout from the color format")
+                            warnedNoImage = true
+                        }
                         val outputBuffer = decoder.getOutputBuffer(outputIndex)
                         if (outputBuffer != null) {
                             val colorFormat = outputFormat.getIntegerOrNull(MediaFormat.KEY_COLOR_FORMAT)
