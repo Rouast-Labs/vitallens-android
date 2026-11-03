@@ -3,6 +3,7 @@ package com.rouast.vitallens.camera
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Size
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import androidx.annotation.OptIn
@@ -15,12 +16,18 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.rouast.vitallens.CameraStreaming
+import com.rouast.vitallens.FrameImage
 import com.rouast.vitallens.InputFrame
+import com.rouast.vitallens.core.FramePlaneBuffer
+import com.rouast.vitallens.core.YuvMatrix
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.VitalLensException
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +37,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -43,6 +52,34 @@ private const val CAMERA_LOCK_ENABLED = false
 
 /** Frame hand-off buffer size between capture and whatever consumes [CameraSource.stream]. */
 private const val FRAME_CHANNEL_CAPACITY = 8
+
+/**
+ * Requested analysis resolution. 4:3 keeps the sensor's full field of view. Frame preparation
+ * only reads the face crop, so a higher resolution costs little and averages more pixels into
+ * each model input pixel. CameraX picks the closest size the device supports.
+ */
+private val ANALYSIS_RESOLUTION = Size(1280, 960)
+
+/**
+ * Camera YUV_420_888 frames are full-range BT.601 (JFIF), as on iOS. The previous RGBA path
+ * converted them as limited range.
+ */
+private val CAMERA_YUV_MATRIX = YuvMatrix.BT601_FULL
+
+/** Wraps a CameraX YUV_420_888 image for in-place reading; closing the frame closes the image. */
+private fun ImageProxy.toFrameImage(): FrameImage.Yuv420 {
+    val (y, u, v) = planes
+    return FrameImage.Yuv420(
+        y = FramePlaneBuffer(y.buffer, y.rowStride, y.pixelStride),
+        u = FramePlaneBuffer(u.buffer, u.rowStride, u.pixelStride),
+        v = FramePlaneBuffer(v.buffer, v.rowStride, v.pixelStride),
+        planesWidth = width,
+        planesHeight = height,
+        visible = cropRect,
+        matrix = CAMERA_YUV_MATRIX,
+        onClose = ::close,
+    )
+}
 
 /**
  * Converts CameraX's clockwise rotation-to-upright degrees (0/90/180/270, from
@@ -63,15 +100,20 @@ internal fun rotationDegreesToOrientation(degrees: Int): ImageOrientation =
  *
  * Uses [ProcessLifecycleOwner] rather than requiring a caller-supplied
  * [androidx.lifecycle.LifecycleOwner], so callers only need [start]/[stop], not lifecycle wiring.
- * Requests RGBA_8888 output directly from CameraX ([ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888]),
- * so no manual YUV conversion is needed here — CameraX's default YUV_420_888 output would
- * otherwise require one.
+ * Frames are CameraX's YUV_420_888 images, read in place by vitallens-core: nothing is converted
+ * or copied per frame. Each [InputFrame] holds its camera image until it is closed, and CameraX
+ * delivers no new frame meanwhile, so consumers must close frames promptly (StreamProcessor
+ * does).
  *
  * Camera permission is only checked, never requested: Android has no API for library code to
  * prompt for a runtime permission without an `Activity` — the host app must request
  * [Manifest.permission.CAMERA] itself before calling [start].
  */
 class CameraSource(private val context: Context) : CameraStreaming {
+
+    /** Requested analysis resolution; settable for tests. */
+    internal var analysisResolution: Size = ANALYSIS_RESOLUTION
+
 
     // An explicit capacity, not Channel.BUFFERED: combined with a non-SUSPEND onBufferOverflow,
     // Channel.BUFFERED collapses to a hardcoded capacity of 1 (a ConflatedBufferedChannel) —
@@ -80,6 +122,8 @@ class CameraSource(private val context: Context) : CameraStreaming {
     private val channel = Channel<InputFrame>(
         capacity = FRAME_CHANNEL_CAPACITY,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        // Frames dropped or never received still hold a camera image
+        onUndeliveredElement = { it.close() },
     )
     override val stream: Flow<InputFrame> = channel.receiveAsFlow()
 
@@ -87,6 +131,7 @@ class CameraSource(private val context: Context) : CameraStreaming {
     private var previewUseCase: Preview? = null
     private var pendingPreviewView: PreviewView? = null
     private var boundCamera: Camera? = null
+    private var analysisExecutor: ExecutorService? = null
 
     override suspend fun start() {
         if (cameraProvider != null) return
@@ -110,13 +155,19 @@ class CameraSource(private val context: Context) : CameraStreaming {
         //   - Never derive exposure/gains from skin-tone colour statistics (patent EP4353143A1).
         val analysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                    .setResolutionStrategy(
+                        ResolutionStrategy(analysisResolution, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+                    )
+                    .build(),
+            )
             .build()
-        // TODO: The analyzer runs on the main executor, so onFrame's full-frame image.toBitmap()
-        //   (~1.2 MB at 640x480) is allocated on the UI thread ~30x/s -> jank and GC pressure. Use a
-        //   dedicated background executor, and ideally crop to the ROI before conversion or reuse one
-        //   bitmap across frames.
-        analysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { image -> onFrame(image) }
+        val executor = Executors.newSingleThreadExecutor()
+        analysisExecutor = executor
+        analysis.setAnalyzer(executor) { image -> onFrame(image) }
 
         val preview = Preview.Builder().build()
         pendingPreviewView?.let { preview.surfaceProvider = it.surfaceProvider }
@@ -149,7 +200,14 @@ class CameraSource(private val context: Context) : CameraStreaming {
         // Fire-and-forget onto the main thread: unbindAll() must run on the main thread, but
         // stop() itself isn't suspend (matching CameraStreaming's synchronous contract), so this
         // can't await completion, only dispatch it.
-        provider?.let { ContextCompat.getMainExecutor(context).execute { it.unbindAll() } }
+        val executor = analysisExecutor
+        analysisExecutor = null
+        provider?.let {
+            ContextCompat.getMainExecutor(context).execute {
+                it.unbindAll()
+                executor?.shutdown()
+            }
+        } ?: executor?.shutdown()
     }
 
     /**
@@ -182,17 +240,18 @@ class CameraSource(private val context: Context) : CameraStreaming {
     }
 
     private fun onFrame(image: ImageProxy) {
-        try {
-            val frame = InputFrame(
-                bitmap = image.toBitmap(),
+        val frame = try {
+            InputFrame(
+                image = image.toFrameImage(),
                 orientation = rotationDegreesToOrientation(image.imageInfo.rotationDegrees),
                 isMirrored = true,
                 timestamp = image.imageInfo.timestamp / 1_000_000_000.0,
             )
-            channel.trySend(frame)
-        } finally {
+        } catch (e: Exception) {
             image.close()
+            return
         }
+        if (!channel.trySend(frame).isSuccess) frame.close()
     }
 
     private suspend fun getCameraProvider(): ProcessCameraProvider = suspendCancellableCoroutine { cont ->

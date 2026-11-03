@@ -79,7 +79,7 @@ The SDK also sends its version to the API as part of the origin (`vitallens-andr
 
 To cut a new release:
 
-1. **Get your changes into `main`:** work on `dev` and merge it into `main` with a PR (CI runs on PRs to `main`).
+1. **Get your changes into `main`:** work on `dev` and merge it into `main` with a PR (CI runs on pushes to `dev` and `main` and on PRs to `main`).
 2. **Create the version commit and tag on `main`:**
     ```bash
     git switch main

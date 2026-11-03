@@ -7,6 +7,7 @@ import com.rouast.vitallens.camera.FileSource
 import com.rouast.vitallens.inference.ImageOrientation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -35,6 +36,29 @@ class FaceDetectorInstrumentedTest {
             assertTrue("y should be in [0, 1]", rect.y in 0.0f..1.0f)
             assertTrue("width should be a plausible face size", rect.width in 0.05f..0.9f)
             assertTrue("height should be a plausible face size", rect.height in 0.05f..0.9f)
+        }
+    }
+
+    /**
+     * A portrait recording stores its pixels sideways with a rotation tag. The face box must be the
+     * same as for the upright video, in the upright frame's coordinates. (It used to be normalized
+     * by the raw frame size, distorting the ROI on every rotated file and camera frame.)
+     */
+    @Test
+    fun rotatedVideoGivesTheSameFaceBoxAsUpright() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        FaceDetector().use { detector ->
+            suspend fun boxOf(asset: String): com.rouast.vitallens.inference.Rect {
+                val source = FileSource.from(context, copyAssetToCache(context, asset))
+                // FileSource bitmaps are raw (unrotated) pixels; the detector applies the orientation
+                return checkNotNull(detector.detectFace(source.frames().first(), source.orientation, isMirrored = false))
+            }
+            val upright = boxOf("sample_video_2.mp4")
+            val rotated = boxOf("sample_video_2_rot90.mp4")
+            assertEquals(upright.x, rotated.x, 0.02f)
+            assertEquals(upright.y, rotated.y, 0.02f)
+            assertEquals(upright.width, rotated.width, 0.02f)
+            assertEquals(upright.height, rotated.height, 0.02f)
         }
     }
 

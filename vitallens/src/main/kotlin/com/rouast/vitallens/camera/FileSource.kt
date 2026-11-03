@@ -196,6 +196,79 @@ private fun decodeYuvBufferToBitmap(
 }
 
 /**
+ * One decoded video frame, valid only inside the [FileSource.mapFrames] transform that receives
+ * it: the decoder reuses the memory as soon as the transform returns.
+ */
+sealed class DecodedFrame {
+    /** The visible frame size. */
+    abstract val width: Int
+    abstract val height: Int
+
+    /** YUV to RGB matrix for this video, from the decoder's colour standard and range. */
+    abstract val yuvMatrix: com.rouast.vitallens.core.YuvMatrix
+
+    /** Converts the whole frame to a [Bitmap] (slow: a per-pixel conversion in Kotlin). */
+    abstract fun toBitmap(): Bitmap
+
+    /** A frame read through [MediaCodec.getOutputImage], with the decoder's own plane layout. */
+    class FromImage internal constructor(
+        val image: Image,
+        override val yuvMatrix: com.rouast.vitallens.core.YuvMatrix,
+    ) : DecodedFrame() {
+        override val width: Int get() = image.cropRect.width()
+        override val height: Int get() = image.cropRect.height()
+        override fun toBitmap(): Bitmap = decodeImageToBitmap(image)
+
+        /** The image as a [com.rouast.vitallens.FrameImage], read in place while [image] is open. */
+        internal fun toFrameImage(): com.rouast.vitallens.FrameImage.Yuv420 {
+            val (y, u, v) = image.planes
+            return com.rouast.vitallens.FrameImage.Yuv420(
+                y = com.rouast.vitallens.core.FramePlaneBuffer(y.buffer, y.rowStride, y.pixelStride),
+                u = com.rouast.vitallens.core.FramePlaneBuffer(u.buffer, u.rowStride, u.pixelStride),
+                v = com.rouast.vitallens.core.FramePlaneBuffer(v.buffer, v.rowStride, v.pixelStride),
+                planesWidth = image.width,
+                planesHeight = image.height,
+                visible = image.cropRect,
+                matrix = yuvMatrix,
+            )
+        }
+    }
+
+    /** A frame in a raw output buffer, laid out as the decoder's output format describes. */
+    class FromBuffer internal constructor(
+        val buffer: ByteBuffer,
+        val offset: Int,
+        override val width: Int,
+        override val height: Int,
+        val colorFormat: Int,
+        val stride: Int,
+        val sliceHeight: Int,
+        override val yuvMatrix: com.rouast.vitallens.core.YuvMatrix,
+    ) : DecodedFrame() {
+        val rowStride: Int get() = if (stride > 0) stride else width
+        val ySliceHeight: Int get() = if (sliceHeight > 0) sliceHeight else height
+        val semiPlanar: Boolean
+            get() = colorFormat != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar &&
+                colorFormat != MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420PackedPlanar
+
+        override fun toBitmap(): Bitmap =
+            decodeYuvBufferToBitmap(buffer, offset, width, height, colorFormat, stride, sliceHeight)
+    }
+}
+
+/** The YUV matrix a decoder output format declares; BT.601 limited range when it says nothing. */
+private fun yuvMatrixOf(format: MediaFormat): com.rouast.vitallens.core.YuvMatrix {
+    val bt709 = format.getIntegerOrNull(MediaFormat.KEY_COLOR_STANDARD) == MediaFormat.COLOR_STANDARD_BT709
+    val full = format.getIntegerOrNull(MediaFormat.KEY_COLOR_RANGE) == MediaFormat.COLOR_RANGE_FULL
+    return when {
+        bt709 && full -> com.rouast.vitallens.core.YuvMatrix.BT709_FULL
+        bt709 -> com.rouast.vitallens.core.YuvMatrix.BT709_LIMITED
+        full -> com.rouast.vitallens.core.YuvMatrix.BT601_FULL
+        else -> com.rouast.vitallens.core.YuvMatrix.BT601_LIMITED
+    }
+}
+
+/**
  * A helper class to read video frames from a local file [Uri].
  *
  * Uses [MediaExtractor] + [MediaCodec] for sequential, in-order decoding — pure sequential decode
@@ -225,7 +298,14 @@ class FileSource private constructor(
      * synchronously right after [MediaCodec.dequeueOutputBuffer], no producer/consumer handoff to
      * an [android.media.ImageReader] involved.
      */
-    fun frames(): Flow<Bitmap> = flow {
+    fun frames(): Flow<Bitmap> = mapFrames { frame, _ -> frame.toBitmap() }
+
+    /**
+     * Decodes every frame and emits what [transform] returns for it (nothing for `null`).
+     * [transform] receives the frame and its index and runs while the frame's memory is valid,
+     * so it can read the decoder output in place, e.g. hand the planes to vitallens-core.
+     */
+    fun <T : Any> mapFrames(transform: (DecodedFrame, Int) -> T?): Flow<T> = flow {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
 
@@ -256,6 +336,7 @@ class FileSource private constructor(
             var outputDone = false
             var outputFormat = decoder.outputFormat
             var warnedNoImage = false
+            var index = 0
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -282,12 +363,12 @@ class FileSource private constructor(
                     val isEos = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                     val image = if (bufferInfo.size > 0) runCatching { decoder.getOutputImage(outputIndex) }.getOrNull() else null
                     if (image != null) {
-                        val bitmap = try {
-                            decodeImageToBitmap(image)
+                        val result = try {
+                            transform(DecodedFrame.FromImage(image, yuvMatrixOf(outputFormat)), index++)
                         } finally {
                             image.close()
                         }
-                        emit(bitmap)
+                        if (result != null) emit(result)
                     } else if (bufferInfo.size > 0) {
                         if (!warnedNoImage) {
                             Log.w(LOG_TAG, "Decoder provides no output Image, guessing the YUV layout from the color format")
@@ -299,17 +380,17 @@ class FileSource private constructor(
                                 ?: MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
                             val stride = outputFormat.getIntegerOrNull(MediaFormat.KEY_STRIDE) ?: width
                             val sliceHeight = outputFormat.getIntegerOrNull(MediaFormat.KEY_SLICE_HEIGHT) ?: height
-                            emit(
-                                decodeYuvBufferToBitmap(
-                                    buffer = outputBuffer,
-                                    offset = bufferInfo.offset,
-                                    width = width,
-                                    height = height,
-                                    colorFormat = colorFormat,
-                                    stride = stride,
-                                    sliceHeight = sliceHeight,
-                                )
+                            val frame = DecodedFrame.FromBuffer(
+                                buffer = outputBuffer,
+                                offset = bufferInfo.offset,
+                                width = width,
+                                height = height,
+                                colorFormat = colorFormat,
+                                stride = stride,
+                                sliceHeight = sliceHeight,
+                                yuvMatrix = yuvMatrixOf(outputFormat),
                             )
+                            transform(frame, index++)?.let { emit(it) }
                         }
                     }
                     decoder.releaseOutputBuffer(outputIndex, false)

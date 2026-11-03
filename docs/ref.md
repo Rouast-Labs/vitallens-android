@@ -168,6 +168,25 @@ Clears the internal data buffers (PPG history, face tracking state) without stop
 client.resetStream()
 ```
 
+### `processVideoFile(uri)`
+
+Processes a local video file in batch mode. Automatically extracts frames, detects the most prominent face, and communicates with the API. Rotated (portrait) recordings are handled.
+
+**Parameters:**
+
+- `uri`: The `Uri` of the video file (e.g., `.mp4`), such as a `content://` Uri from the system picker or a `file://` Uri.
+
+**Returns:** `VitalLensResult`
+
+```kotlin
+try {
+    val result = client.processVideoFile(videoUri)
+    println("Avg HR: ${result.heartRate?.value ?: 0.0}")
+} catch (e: VitalLensException) {
+    println("File processing failed: $e")
+}
+```
+
 ### `close()`
 
 Permanently releases resources: removes the app lifecycle observer and closes the underlying stream processor. Call this once the client is no longer needed — the JVM has no deterministic destructor to do this for you automatically.

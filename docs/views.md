@@ -9,6 +9,7 @@ Import the screens from the UI module:
 ```kotlin
 import com.rouast.vitallens.ui.ScanScreen
 import com.rouast.vitallens.ui.MonitorScreen
+import com.rouast.vitallens.ui.FileScreen
 ```
 
 ---
@@ -66,4 +67,25 @@ MonitorScreen(
 | `bufferOffsetSeconds` | `Double` | Delay in seconds for smooth chart rendering. Default is `0.15`. |
 | `windowSizeSeconds` | `Double` | Duration of data to show in the waveform charts. Default is `8.0`. |
 | `minDisplayDurationSeconds` | `Double` | Minimum data required before displaying values. Default is `6.0`. |
+| `baseUrl` | `HttpUrl?` | Overrides the API host. Rarely needed — see [Advanced Use](advanced.md). |
+
+---
+
+## 3. FileScreen
+
+A complete UI for selecting and analyzing pre-recorded videos through the system file picker (gallery or files). It handles file selection, processing, and result visualization. No camera permission is needed.
+
+```kotlin
+FileScreen(
+    apiKey = "YOUR_KEY",
+)
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `apiKey` | `String?` | Your API Key. Required if `proxyUrl` is not set. |
+| `proxyUrl` | `HttpUrl?` | URL to your backend proxy. |
+| `method` | `String` | Model version. Default is `"vitallens"`. |
 | `baseUrl` | `HttpUrl?` | Overrides the API host. Rarely needed — see [Advanced Use](advanced.md). |

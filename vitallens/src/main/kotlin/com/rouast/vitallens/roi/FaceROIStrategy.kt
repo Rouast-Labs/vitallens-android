@@ -2,6 +2,8 @@ package com.rouast.vitallens.roi
 
 import android.graphics.Bitmap
 import com.rouast.vitallens.FaceDetecting
+import com.rouast.vitallens.FrameImage
+import com.rouast.vitallens.InputFrame
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.ROICalculator
 import com.rouast.vitallens.inference.Rect
@@ -41,6 +43,18 @@ class FaceROIStrategy(
         orientation: ImageOrientation,
         isMirrored: Boolean,
         roiMethod: String,
+    ): Rect? = determineROI(FrameImage.FromBitmap(bitmap), orientation, isMirrored, roiMethod)
+
+    /** Detects on a copy of YUV frames (NV21, a fraction of a millisecond), as detection outlives the frame. */
+    override suspend fun determineROI(frame: InputFrame, roiMethod: String): Rect? =
+        determineROI(frame.image, frame.orientation, frame.isMirrored, roiMethod, snapshot = true)
+
+    private suspend fun determineROI(
+        image: FrameImage,
+        orientation: ImageOrientation,
+        isMirrored: Boolean,
+        roiMethod: String,
+        snapshot: Boolean = false,
     ): Rect? {
         val now = System.currentTimeMillis()
         val shouldTrigger = mutex.withLock {
@@ -52,19 +66,24 @@ class FaceROIStrategy(
             }
         }
         if (shouldTrigger) {
-            scope.launch { performDetection(bitmap, orientation, isMirrored, roiMethod, now) }
+            val owned = if (snapshot && image is FrameImage.Yuv420) runCatching { image.copyToNv21() }.getOrNull() else image
+            if (owned == null) {
+                mutex.withLock { isDetecting = false }
+            } else {
+                scope.launch { performDetection(owned, orientation, isMirrored, roiMethod, now) }
+            }
         }
         return mutex.withLock { currentROI }
     }
 
     private suspend fun performDetection(
-        bitmap: Bitmap,
+        image: FrameImage,
         orientation: ImageOrientation,
         isMirrored: Boolean,
         roiMethod: String,
         triggeredAt: Long,
     ) {
-        val faceRect = runCatching { detector.detectFace(bitmap, orientation, isMirrored) }.getOrNull()
+        val faceRect = runCatching { detector.detectFace(image, orientation, isMirrored) }.getOrNull()
         val roi = faceRect?.let { ROICalculator.calculateROI(it, roiMethod) }
         mutex.withLock {
             currentROI = roi

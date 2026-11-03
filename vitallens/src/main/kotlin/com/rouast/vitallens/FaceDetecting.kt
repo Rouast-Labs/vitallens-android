@@ -13,4 +13,11 @@ interface FaceDetecting {
      *   `null` if no face is found.
      */
     suspend fun detectFace(bitmap: Bitmap, orientation: ImageOrientation, isMirrored: Boolean): Rect?
+
+    /**
+     * Detects a face within [image]. The default converts it to a [Bitmap]; implementations that
+     * can read YUV directly should override this.
+     */
+    suspend fun detectFace(image: FrameImage, orientation: ImageOrientation, isMirrored: Boolean): Rect? =
+        detectFace(image.toBitmap(), orientation, isMirrored)
 }
