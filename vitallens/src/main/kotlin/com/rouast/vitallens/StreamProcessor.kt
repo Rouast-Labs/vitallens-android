@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import com.rouast.vitallens.core.InferenceMode
 import com.rouast.vitallens.core.Session
 import com.rouast.vitallens.core.WaveformMode
-import com.rouast.vitallens.image.ImageProcessor
+import com.rouast.vitallens.image.CoreFrames
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.ConnectionMonitor
 import com.rouast.vitallens.inference.ConnectionThresholds
@@ -49,11 +49,6 @@ import kotlin.math.pow
  */
 typealias FrameTransformer = (Bitmap, Rect, ModelConfig, ImageOrientation, Boolean) -> InferenceUnit
 
-private val defaultFrameTransformer: FrameTransformer = { bitmap, roi, config, orientation, isMirrored ->
-    val processed = ImageProcessor.process(bitmap, roi, config.inputSize, orientation, isMirrored)
-    InferenceUnit.RgbData(ImageProcessor.toRgbBytes(processed))
-}
-
 /**
  * The core engine that coordinates the camera, ROI tracking, buffering, and the background
  * inference loop.
@@ -77,7 +72,8 @@ class StreamProcessor(
 ) : Closeable {
 
     private val roiStrategy: ROIStrategy = roiStrategy ?: FaceROIStrategy()
-    private val transformer: FrameTransformer = transformer ?: defaultFrameTransformer
+    /** A custom transformer, or `null` for vitallens-core, which reads YUV camera frames in place. */
+    private val transformer: FrameTransformer? = transformer
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -143,7 +139,12 @@ class StreamProcessor(
 
         cameraForwardingJob = scope.launch {
             camera.stream.collect { frame ->
-                if (!isPaused) processFrame(frame)
+                // Camera frames hold the camera's buffers: release each one once processed
+                try {
+                    if (!isPaused) processFrame(frame)
+                } finally {
+                    frame.close()
+                }
             }
         }
 
@@ -293,7 +294,7 @@ class StreamProcessor(
         }
         if (!shouldProcess) return
 
-        val target = roiStrategy.determineROI(frame.bitmap, frame.orientation, frame.isMirrored, activeConfig.roiMethod)
+        val target = roiStrategy.determineROI(frame, activeConfig.roiMethod)
 
         val isFacePresent = target != null
         val callback = mutex.withLock {
@@ -318,7 +319,10 @@ class StreamProcessor(
 
         for (item in allBuffers) {
             try {
-                val unit = transformer(frame.bitmap, item.roi, activeConfig, frame.orientation, frame.isMirrored)
+                val unit = transformer?.invoke(frame.bitmap, item.roi, activeConfig, frame.orientation, frame.isMirrored)
+                    ?: InferenceUnit.RgbData(
+                        CoreFrames.fromFrame(frame.image, item.roi, activeConfig.inputSize, frame.orientation, frame.isMirrored),
+                    )
                 val context = InferenceContext(
                     timestamp = frame.timestamp,
                     orientation = frame.orientation,

@@ -37,6 +37,10 @@ For all requests, your proxy must:
     - **Purpose:** Processes live camera frames in real-time.
     - **Headers to Forward:** `Content-Type: application/octet-stream`, `X-Origin`, `X-Encoding`, `X-Model`, `X-State`.
     - **Body:** Forward the raw binary body exactly as received (the Android client compresses it using gzip).
+3. POST `/file`
+    - **Purpose:** Processes pre-recorded video files.
+    - **Headers to Forward:** `Content-Type: application/json`.
+    - **Body:** Forward the JSON payload exactly as received (contains Base64 encoded video and state).
 
 ### Example Reference
 

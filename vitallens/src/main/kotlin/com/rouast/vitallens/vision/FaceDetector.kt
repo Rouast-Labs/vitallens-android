@@ -6,6 +6,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.rouast.vitallens.FaceDetecting
+import com.rouast.vitallens.FrameImage
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.Rect
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -71,18 +72,31 @@ class FaceDetector : FaceDetecting, Closeable {
      * @return The bounding box of the face in normalized coordinates (0.0-1.0) with a top-left
      *   origin, or `null` if no face is found.
      */
-    override suspend fun detectFace(bitmap: Bitmap, orientation: ImageOrientation, isMirrored: Boolean): Rect? {
-        val inputImage = InputImage.fromBitmap(bitmap, orientationToRotationDegrees(orientation))
+    override suspend fun detectFace(bitmap: Bitmap, orientation: ImageOrientation, isMirrored: Boolean): Rect? =
+        detect(InputImage.fromBitmap(bitmap, orientationToRotationDegrees(orientation)), isMirrored)
+
+    /** Reads NV21 frames directly, without converting them to RGB. */
+    override suspend fun detectFace(image: FrameImage, orientation: ImageOrientation, isMirrored: Boolean): Rect? {
+        val nv21 = (image as? FrameImage.Yuv420)?.nv21 ?: return detectFace(image.toBitmap(), orientation, isMirrored)
+        val inputImage = InputImage.fromByteBuffer(
+            nv21, image.width, image.height, orientationToRotationDegrees(orientation), InputImage.IMAGE_FORMAT_NV21,
+        )
+        return detect(inputImage, isMirrored)
+    }
+
+    private suspend fun detect(inputImage: InputImage, isMirrored: Boolean): Rect? {
         val face = detector.process(inputImage).await().firstOrNull() ?: return null
         val box = face.boundingBox
-
+        // ML Kit reports the box in upright (rotated) coordinates, but InputImage's width and
+        // height are those of the raw, unrotated pixels: swap them for 90 and 270 degrees.
+        val sideways = inputImage.rotationDegrees % 180 != 0
         return normalizeFaceBox(
             left = box.left,
             top = box.top,
             width = box.width(),
             height = box.height(),
-            imageWidth = inputImage.width,
-            imageHeight = inputImage.height,
+            imageWidth = if (sideways) inputImage.height else inputImage.width,
+            imageHeight = if (sideways) inputImage.width else inputImage.height,
             isMirrored = isMirrored,
         )
     }

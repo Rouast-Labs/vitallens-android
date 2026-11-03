@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material3.Button
@@ -37,6 +38,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.rouast.vitallens.ui.FileScreen
 import com.rouast.vitallens.ui.MonitorScreen
 import com.rouast.vitallens.ui.ScanScreen
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -53,12 +55,8 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * A minimal tabbed app: Monitor and Scan, each backed directly by the corresponding vitallens-ui
- * screen, with a fallback prompt if no API key or proxy URL is configured.
- *
- * File mode (`FileScreen`/`VitalLens.processVideoFile`) is implemented but not exposed here for
- * now — its underlying decode path isn't yet robust/fast enough across devices to ship. See
- * CLAUDE.md's "File mode status" note.
+ * A minimal tabbed app: Monitor, Scan and File, each backed directly by the corresponding
+ * vitallens-ui screen, with a fallback prompt if no API key or proxy URL is configured.
  */
 @Composable
 fun DemoApp() {
@@ -101,6 +99,12 @@ fun DemoApp() {
                     icon = { Icon(Icons.Filled.Face, contentDescription = null) },
                     label = { Text("Scan") },
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                    label = { Text("File") },
+                )
             }
         },
     ) { padding ->
@@ -116,6 +120,8 @@ fun DemoApp() {
                 } else {
                     CameraPermissionRequiredScreen()
                 }
+                // Picks a video through the system picker: no camera permission needed
+                2 -> FileScreen(apiKey = apiKey, proxyUrl = proxyUrl, baseUrl = baseUrl)
             }
         }
     }

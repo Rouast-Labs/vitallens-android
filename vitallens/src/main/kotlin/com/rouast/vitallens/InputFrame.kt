@@ -3,14 +3,33 @@ package com.rouast.vitallens
 import android.graphics.Bitmap
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.Rect
+import java.io.Closeable
 
-/** A container for a video frame and its capture metadata. */
-data class InputFrame(
-    val bitmap: Bitmap,
+/**
+ * A container for a video frame and its capture metadata.
+ *
+ * Frames from [com.rouast.vitallens.camera.CameraSource] hold the camera's YUV planes in place
+ * rather than a [Bitmap]; [bitmap] converts them on first use. Such a frame is only valid until it
+ * is closed: [StreamProcessor] closes every frame it receives once it has processed it. Closing a
+ * frame made from a [Bitmap] does nothing.
+ */
+class InputFrame internal constructor(
+    /** The frame's pixels. */
+    val image: FrameImage,
     val orientation: ImageOrientation,
     val isMirrored: Boolean,
     val timestamp: Double,
-)
+) : Closeable {
+
+    constructor(bitmap: Bitmap, orientation: ImageOrientation, isMirrored: Boolean, timestamp: Double) :
+        this(FrameImage.FromBitmap(bitmap), orientation, isMirrored, timestamp)
+
+    /** The frame as an ARGB_8888 [Bitmap]: the original one, or converted from YUV on first use. */
+    val bitmap: Bitmap get() = image.toBitmap()
+
+    /** Releases the frame's pixel memory back to its source (e.g. the camera). */
+    override fun close() = image.close()
+}
 
 /**
  * Maps a normalized rectangle from display/UI orientation space back to the raw, unrotated,

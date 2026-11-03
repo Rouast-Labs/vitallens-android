@@ -2,6 +2,7 @@ package com.rouast.vitallens
 
 import android.content.Context
 import android.net.Uri
+import com.rouast.vitallens.camera.DecodedFrame
 import com.rouast.vitallens.camera.FileSource
 import com.rouast.vitallens.core.BufferConfig
 import com.rouast.vitallens.core.InferenceMode
@@ -9,7 +10,8 @@ import com.rouast.vitallens.core.InferenceCommand
 import com.rouast.vitallens.core.Session
 import com.rouast.vitallens.core.SessionInput
 import com.rouast.vitallens.core.WaveformMode
-import com.rouast.vitallens.image.ImageProcessor
+import com.rouast.vitallens.image.CoreFrames
+import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.InferenceContext
 import com.rouast.vitallens.inference.InferenceState
 import com.rouast.vitallens.inference.InferenceStrategy
@@ -81,15 +83,12 @@ class FileProcessor(
     private suspend fun performScanningPass(config: ModelConfig): Rect {
         val source = FileSource.from(context, uri)
         val stride = maxOf(1, source.nominalFrameRate.toInt())
-        var frameCount = 0
         val detections = mutableListOf<Rect>()
 
-        source.frames().collect { frame ->
-            frameCount++
-            if (frameCount % stride == 0) {
-                val rect = runCatching { detector.detectFace(frame, source.orientation, isMirrored = false) }.getOrNull()
-                if (rect != null) detections.add(rect)
-            }
+        // Only the frames that go to face detection are converted to a Bitmap
+        source.mapFrames { frame, index -> if ((index + 1) % stride == 0) frame.toBitmap() else null }.collect { frame ->
+            val rect = runCatching { detector.detectFace(frame, source.orientation, isMirrored = false) }.getOrNull()
+            if (rect != null) detections.add(rect)
         }
 
         if (detections.isEmpty()) {
@@ -121,7 +120,10 @@ class FileProcessor(
             var currentState: InferenceState? = null
             var totalFramesProcessed = 0
 
-            source.frames().collect { frame ->
+            // The decoder's planes go straight to vitallens-core, which reads only the ROI
+            source.mapFrames { frame, _ ->
+                PreparedFrame(runCatching { prepareFrame(frame, roi, config.inputSize, source.orientation) }.getOrNull())
+            }.collect { prepared ->
                 val timestamp = totalFramesProcessed / nominalFps
                 val frameContext = InferenceContext(
                     timestamp = timestamp,
@@ -130,10 +132,7 @@ class FileProcessor(
                     roi = roi,
                 )
 
-                runCatching {
-                    val processed = ImageProcessor.process(frame, roi, config.inputSize, source.orientation, isMirrored = false)
-                    ImageProcessor.toRgbBytes(processed)
-                }.getOrNull()?.let { bytes ->
+                prepared.rgb?.let { bytes ->
                     buffer.append(InferenceUnit.RgbData(bytes), frameContext)
                 }
 
@@ -172,3 +171,27 @@ class FileProcessor(
         }
     }
 }
+
+/** Model input for one decoded frame, or `null` if it could not be prepared. */
+private class PreparedFrame(val rgb: ByteArray?)
+
+/** Crops, converts and downsamples one decoded frame to model input with vitallens-core. */
+private fun prepareFrame(frame: DecodedFrame, roi: Rect, targetSize: Int, orientation: ImageOrientation): ByteArray =
+    when (frame) {
+        is DecodedFrame.FromImage ->
+            CoreFrames.fromImage(frame.image, roi, targetSize, orientation, isMirrored = false, matrix = frame.yuvMatrix)
+        is DecodedFrame.FromBuffer -> CoreFrames.fromYuvBuffer(
+            buffer = frame.buffer,
+            offset = frame.offset,
+            width = frame.width,
+            height = frame.height,
+            stride = frame.rowStride,
+            sliceHeight = frame.ySliceHeight,
+            semiPlanar = frame.semiPlanar,
+            roi = roi,
+            targetSize = targetSize,
+            orientation = orientation,
+            isMirrored = false,
+            matrix = frame.yuvMatrix,
+        )
+    }

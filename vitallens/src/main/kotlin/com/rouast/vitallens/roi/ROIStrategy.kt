@@ -1,6 +1,7 @@
 package com.rouast.vitallens.roi
 
 import android.graphics.Bitmap
+import com.rouast.vitallens.InputFrame
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.Rect
 
@@ -23,4 +24,11 @@ interface ROIStrategy {
         isMirrored: Boolean,
         roiMethod: String,
     ): Rect?
+
+    /**
+     * Determines the current region of interest for [frame], which is only valid during this
+     * call: keep a copy for any work that outlives it. The default uses [InputFrame.bitmap].
+     */
+    suspend fun determineROI(frame: InputFrame, roiMethod: String): Rect? =
+        determineROI(frame.bitmap, frame.orientation, frame.isMirrored, roiMethod)
 }
