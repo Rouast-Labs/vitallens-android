@@ -64,6 +64,8 @@ kotlin {
     }
 }
 
+val mockitoAgent = configurations.create("mockitoAgent")
+
 dependencies {
     // api, not implementation: Protocols.kt (FaceDetecting, CameraStreaming, InputFrame)
     // exposes Rect/ImageOrientation from vitallens-inference in this module's own public API,
@@ -93,6 +95,8 @@ dependencies {
     // placeholders under a plain JVM unit test (no Robolectric here) — needed to fake
     // references for tests that don't care about real pixel/view behavior.
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.mockito.core)
+    mockitoAgent(libs.mockito.core) { isTransitive = false }
 
     // Real-device/emulator instrumented tests (androidTest, not test) for CameraSource/
     // FaceDetector/FileSource — the parts that need a real Android runtime, ML Kit, and a
@@ -103,6 +107,10 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-javaagent:${mockitoAgent.asPath}") })
 }
 
 // ==========================================

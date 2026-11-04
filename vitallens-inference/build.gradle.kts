@@ -39,6 +39,8 @@ kotlin {
     }
 }
 
+val mockitoAgent = configurations.create("mockitoAgent")
+
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
@@ -62,6 +64,12 @@ dependencies {
     // test (no Robolectric here) — needed to fake a Bitmap reference for tests that
     // don't care about actual pixel behavior, only that it flows through unchanged.
     testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.mockito.core)
+    mockitoAgent(libs.mockito.core) { isTransitive = false }
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-javaagent:${mockitoAgent.asPath}") })
 }
 
 // ==========================================
