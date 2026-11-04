@@ -5,6 +5,7 @@ import com.rouast.vitallens.FaceDetecting
 import com.rouast.vitallens.inference.ImageOrientation
 import com.rouast.vitallens.inference.ROICalculator
 import com.rouast.vitallens.inference.Rect
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -22,12 +23,16 @@ import org.mockito.kotlin.mock
  */
 class FaceROIStrategyTest {
 
-    private class FakeFaceDetector(private val results: MutableList<Rect?>) : FaceDetecting {
+    private class FakeFaceDetector(
+        private val results: MutableList<Rect?>,
+        private val gate: CompletableDeferred<Unit>? = null,
+    ) : FaceDetecting {
         var callCount = 0
             private set
 
         override suspend fun detectFace(bitmap: Bitmap, orientation: ImageOrientation, isMirrored: Boolean): Rect? {
             callCount++
+            gate?.await()
             return if (results.isEmpty()) null else results.removeAt(0)
         }
     }
@@ -48,11 +53,13 @@ class FaceROIStrategyTest {
     fun `first call triggers detection but returns null until it completes`() = runBlocking {
         val rawRect = Rect(0.1f, 0.1f, 0.2f, 0.2f)
         val expectedRect = ROICalculator.calculateROI(rawRect, "face")
-        val detector = FakeFaceDetector(mutableListOf(rawRect))
+        val gate = CompletableDeferred<Unit>()
+        val detector = FakeFaceDetector(mutableListOf(rawRect), gate)
         val strategy = FaceROIStrategy(detector = detector, detectionIntervalMs = 500)
 
         val initialRoi = strategy.determineROI(dummyBitmap, ImageOrientation.UP, isMirrored = false, roiMethod = "face")
         assertNull(initialRoi)
+        gate.complete(Unit)
 
         // Polls for the background detection to land instead of asserting after a fixed delay:
         // a bounded real-time sleep here previously raced the scope.launch dispatch onto
