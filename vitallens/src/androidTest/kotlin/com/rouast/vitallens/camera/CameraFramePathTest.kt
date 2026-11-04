@@ -28,9 +28,7 @@ import kotlin.math.abs
 
 private const val TAG = "CameraFramePath"
 
-private fun addr(b: java.nio.ByteBuffer) = com.sun.jna.Pointer.nativeValue(com.sun.jna.Native.getDirectBufferPointer(b)) + b.position()
-
-/** The YUV camera frame path: in-place preparation, NV21 snapshots for detection, and timings. */
+/** The YUV camera frame path: in-place preparation and NV21 snapshots for detection. */
 @RunWith(AndroidJUnit4::class)
 class CameraFramePathTest {
 
@@ -96,78 +94,18 @@ class CameraFramePathTest {
         val camera = CameraSource(context).apply { analysisResolution = size }
         camera.start()
         var frames = 0
-        var first = 0.0
-        var last = 0.0
-        var prepNs = 0L
-        var snapshotNs = 0L
-        var bitmapNs = 0L
-        var repeatNs = 0L
-        var copiedNs = 0L
-        var spins = 0
-        var info = ""
         try {
             withTimeout(15_000) {
                 camera.stream.take(120).collect { frame ->
                     frame.use {
                         val image = it.image as FrameImage.Yuv420
-                        if (frames == 0) {
-                            first = it.timestamp
-                            info = "${image.planesWidth}x${image.planesHeight} visible ${image.visible} " +
-                                "Y rs ${image.y.rowStride} U ps ${image.u.pixelStride} V ps ${image.v.pixelStride} " +
-                                "orientation ${it.orientation}, V-U address ${addr(image.u.buffer) - addr(image.v.buffer)}"
-                        }
-                        last = it.timestamp
-                        var t = System.nanoTime()
                         val rgb = CoreFrames.fromYuv(image, roi, 40, it.orientation, it.isMirrored)
-                        prepNs += System.nanoTime() - t
                         assertEquals(40 * 40 * 3, rgb.size)
-                        // Same call again right away: CPU already busy, data maybe cached
-                        t = System.nanoTime()
-                        CoreFrames.fromYuv(image, roi, 40, it.orientation, it.isMirrored)
-                        repeatNs += System.nanoTime() - t
                         if (frames % 15 == 0) {
-                            t = System.nanoTime()
                             val copy = image.copyToNv21()
-                            snapshotNs += System.nanoTime() - t
-                            // The core on ordinary (cached) memory, same frame
-                            t = System.nanoTime()
-                            CoreFrames.fromYuv(copy, roi, 40, it.orientation, it.isMirrored)
-                            CoreFrames.fromYuv(copy, roi, 40, it.orientation, it.isMirrored)
-                            copiedNs += (System.nanoTime() - t) / 2
-                            spins++
-                            if (frames == 90) {
-                                // Old path's Kotlin crop + box downsample, same frame, same conditions
-                                // (excludes its CameraX YUV -> RGBA conversion and full-frame Bitmap copy)
-                                val bmp = image.toBitmap()
-                                val kotlinTimes = LongArray(10) { _ ->
-                                    val t0 = System.nanoTime()
-                                    com.rouast.vitallens.image.ImageProcessor.toRgbBytes(
-                                        com.rouast.vitallens.image.ImageProcessor.process(bmp, roi, 40, it.orientation, it.isMirrored))
-                                    System.nanoTime() - t0
-                                }
-                                val coreTimes = LongArray(10) { _ ->
-                                    val t0 = System.nanoTime()
-                                    CoreFrames.fromYuv(image, roi, 40, it.orientation, it.isMirrored)
-                                    System.nanoTime() - t0
-                                }
-                                val detector = FaceDetector()
-                                val detectTimes = LongArray(5) { _ ->
-                                    val t0 = System.nanoTime()
-                                    runBlocking { detector.detectFace(copy, it.orientation, it.isMirrored) }
-                                    System.nanoTime() - t0
-                                }
-                                detector.close()
-                                Log.i(TAG, "  10x old Kotlin crop+downsample (us): ${kotlinTimes.joinToString { (it / 1000).toString() }}")
-                                Log.i(TAG, "  10x core on camera planes (us): ${coreTimes.joinToString { (it / 1000).toString() }}")
-                                Log.i(TAG, "  5x ML Kit on NV21 snapshot (ms): ${detectTimes.joinToString { (it / 1_000_000).toString() }}")
-                            }
+                            assertArrayEquals(rgb, CoreFrames.fromYuv(copy, roi, 40, it.orientation, it.isMirrored))
                         }
-                        if (frames == 60) {
-                            t = System.nanoTime()
-                            val b = image.toBitmap()
-                            bitmapNs = System.nanoTime() - t
-                            assertEquals(image.width, b.width)
-                        }
+                        if (frames == 60) assertEquals(image.width, image.toBitmap().width)
                         frames++
                     }
                 }
@@ -175,10 +113,6 @@ class CameraFramePathTest {
         } finally {
             camera.stop()
         }
-        Log.i(TAG, "requested $size: camera $info")
-        Log.i(TAG, "  repeat on camera memory %.0f us/frame, core on NV21 copy %.0f us".format(repeatNs / 1e3 / frames, copiedNs / 1e3 / spins))
-        Log.i(TAG, "%d frames at %.1f fps; prepare %.0f us/frame, NV21 snapshot %.0f us, full-frame toBitmap %.1f ms".format(
-            frames, (frames - 1) / (last - first), prepNs / 1e3 / frames, snapshotNs / 1e3 / ((frames + 14) / 15), bitmapNs / 1e6))
         assertEquals(120, frames)
     }
 }

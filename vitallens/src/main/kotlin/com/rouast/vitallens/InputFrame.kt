@@ -33,7 +33,7 @@ class InputFrame internal constructor(
 
 /**
  * Maps a normalized rectangle from display/UI orientation space back to the raw, unrotated,
- * unmirrored coordinate space of the original sensor frame. Used by `ImageProcessor.kt` to
+ * unmirrored coordinate space of the original sensor frame. Used by `CoreFrames.kt` to
  * locate an ROI (computed against a possibly-rotated preview) within the raw frame buffer
  * before pixel extraction.
  */

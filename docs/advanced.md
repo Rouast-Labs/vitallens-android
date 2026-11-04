@@ -116,9 +116,9 @@ If you're using `VitalLens` directly rather than the pre-built screens, pass a c
 
 ## Image Processing
 
-Under the hood, the SDK uses plain Android `Bitmap`/`Matrix` operations via the `ImageProcessor` object to crop, scale, rotate, and reflect video frames. There's no hardware-accelerated image pipeline yet — this is a deliberate, revisitable tradeoff, not an oversight: profiling has not yet shown it to be a bottleneck relative to network/inference time.
+Under the hood, the SDK prepares frames with [vitallens-core](https://github.com/Rouast-Labs/vitallens-core): crop, colour conversion, area averaging, rotation and mirroring in one native pass. Camera and video frames are read as YUV planes in place, without converting the full frame to a `Bitmap`.
 
-If you are writing a custom `FrameTransformer` or building your own pipeline, you can access this processor directly:
+If you are writing a custom `FrameTransformer` or building your own pipeline on `Bitmap`s, the `ImageProcessor` object gives you the same preparation:
 
 ```kotlin
 import com.rouast.vitallens.image.ImageProcessor

@@ -12,9 +12,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Rather than trust the crop/scale/rotate/mirror Matrix composition by derivation alone, verify
- * it empirically against bitmaps with distinctly colored corners and check where each corner
- * actually lands.
+ * Checks the crop/scale/rotate/mirror result against bitmaps with distinctly colored corners:
+ * where each corner actually lands.
  */
 @RunWith(AndroidJUnit4::class)
 class ImageProcessorInstrumentedTest {

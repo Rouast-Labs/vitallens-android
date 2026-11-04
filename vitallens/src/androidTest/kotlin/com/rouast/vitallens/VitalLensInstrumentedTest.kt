@@ -127,7 +127,7 @@ class VitalLensInstrumentedTest {
     //
     // 100x100: these tests (unlike StreamProcessorTest, which always supplies an explicit stub
     // transformer) exercise StreamProcessor's *default* transformer, which crops the configured
-    // ROI out of this bitmap for real via ImageProcessor — a too-small bitmap makes that crop
+    // ROI out of this bitmap for real via CoreFrames — a too-small bitmap makes that crop
     // fail, which processFrame's catch-all silently swallows, so frames would never actually make
     // it into the buffer.
     private val dummyBitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)

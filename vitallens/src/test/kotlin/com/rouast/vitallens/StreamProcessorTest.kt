@@ -37,7 +37,7 @@ import org.mockito.kotlin.mock
  * Real (not virtual) delays throughout — see FaceROIStrategyTest's note on why.
  *
  * Every processor here is built with an explicit stub/custom [FrameTransformer], never the
- * class's own default one: the default transformer calls the real ImageProcessor.process() on a
+ * class's own default one: the default transformer calls vitallens-core via CoreFrames on a
  * real Bitmap, and android.graphics.Bitmap is a "Stub!"-throwing placeholder under a plain JVM
  * unit test (no Robolectric here). The default transformer's actual pixel behavior is already
  * covered separately by ImageProcessorTest/ImageProcessorInstrumentedTest; these tests are only

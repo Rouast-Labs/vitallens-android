@@ -160,13 +160,18 @@ internal object CoreFrames {
             outHeight = h,
             orientation = Orientation(0u, false),
         )
-        val argb = IntArray(w * h)
+        return rgbToBitmap(rgb, w, h)
+    }
+
+    /** Packed RGB bytes as an opaque ARGB_8888 [Bitmap]. */
+    fun rgbToBitmap(rgb: ByteArray, width: Int, height: Int): Bitmap {
+        val argb = IntArray(width * height)
         for (i in argb.indices) {
             val j = i * 3
             argb[i] = (0xFF shl 24) or ((rgb[j].toInt() and 0xFF) shl 16) or
                 ((rgb[j + 1].toInt() and 0xFF) shl 8) or (rgb[j + 2].toInt() and 0xFF)
         }
-        return Bitmap.createBitmap(argb, w, h, Bitmap.Config.ARGB_8888)
+        return Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
     }
 
     /** Reused per thread: the crop's ARGB pixels, and a direct buffer holding them as bytes. */
